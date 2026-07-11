@@ -1,0 +1,27 @@
+# Recommended backend host: Render (persistent Node server, no request timeout,
+# runs the Express app as-is). Frontends stay on Vercel.
+# Deploy: Render Dashboard → New → Blueprint → pick this repo.
+services:
+  - type: web
+    name: culinova-eos-server
+    runtime: node
+    rootDir: server
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_EXTRACTION_MODEL
+        value: gpt-4o
+      - key: OPENAI_EMBEDDING_MODEL
+        value: text-embedding-3-small
+      # Optional — Chroma Cloud for semantic search in production.
+      # Leave unset to use text search.
+      - key: CHROMA_URL
+        sync: false
