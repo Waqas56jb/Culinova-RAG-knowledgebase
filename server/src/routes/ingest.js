@@ -10,9 +10,14 @@ const { ingestModelFiles } = require("../services/ingestModel");
 const { extractMainImage } = require("../services/pdfImage");
 const { importWorkbook, buildTemplateBuffer } = require("../services/excelImport");
 const { persistDraft } = require("../utils/draft");
+const auth = require("../services/auth");
 
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 40 * 1024 * 1024 } });
+
+// Importing equipment writes to the knowledge base — it was open to the public internet until now.
+const canIngest = auth.requirePermission("knowledge.ingest");
+const canEdit = auth.requirePermission("knowledge.edit");
 
 const DOC_LABELS = {
   datasheet: "Datasheet",
@@ -38,7 +43,7 @@ function mergeModel(results) {
  * multipart: files[] (PDFs) + doc_types (JSON array aligned to files, optional)
  * One upload session = one equipment model (may include several documents).
  */
-router.post("/pdf", upload.array("files", 10), async (req, res) => {
+router.post("/pdf", canIngest, upload.array("files", 10), async (req, res) => {
   try {
     if (!req.files || !req.files.length) return res.status(400).json({ error: "No files uploaded." });
 
@@ -119,7 +124,7 @@ router.post("/pdf", upload.array("files", 10), async (req, res) => {
  * each file's relative path, aligned to files). Groups files by their model folder and
  * runs the full auto-organize pipeline per model.
  */
-router.post("/folder", upload.array("files", 400), async (req, res) => {
+router.post("/folder", canIngest, upload.array("files", 400), async (req, res) => {
   try {
     if (!req.files || !req.files.length) return res.status(400).json({ error: "No files uploaded." });
     let paths = [];
@@ -153,7 +158,7 @@ router.post("/folder", upload.array("files", 400), async (req, res) => {
 });
 
 /** GET /api/ingest/excel-template — download the standardized EOS import template (.xlsx) */
-router.get("/excel-template", (req, res) => {
+router.get("/excel-template", auth.authRequired, (req, res) => {
   try {
     const buf = buildTemplateBuffer();
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
@@ -166,7 +171,7 @@ router.get("/excel-template", (req, res) => {
 });
 
 /** POST /api/ingest/excel  (multipart: file) — generalized Excel bulk import (one Draft per row) */
-router.post("/excel", upload.single("file"), async (req, res) => {
+router.post("/excel", canIngest, upload.single("file"), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: "No Excel file uploaded." });
     const r = await importWorkbook(req.file.buffer, { log: () => {} });
@@ -178,7 +183,7 @@ router.post("/excel", upload.single("file"), async (req, res) => {
 });
 
 /** POST /api/ingest/image/:entryId  (multipart: image) — manually set/replace the product image */
-router.post("/image/:entryId", upload.single("image"), async (req, res) => {
+router.post("/image/:entryId", canEdit, upload.single("image"), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: "No image uploaded." });
     const { data: link } = await supabase
@@ -199,7 +204,7 @@ router.post("/image/:entryId", upload.single("image"), async (req, res) => {
 });
 
 /** POST /api/ingest/manual  { model, attributes, notes } */
-router.post("/manual", express.json({ limit: "2mb" }), async (req, res) => {
+router.post("/manual", canIngest, express.json({ limit: "2mb" }), async (req, res) => {
   try {
     const { model = {}, attributes = [], notes = [] } = req.body || {};
     const draft = await persistDraft({ model, attributes, notes, origin: "manual" });

@@ -5,10 +5,19 @@ const { getEntryDetail } = require("../utils/detail");
 const { uploadBuffer } = require("../services/storage");
 const { indexEntry } = require("../services/embeddings");
 const { updateEntryIdentity } = require("../utils/draft");
+const auth = require("../services/auth");
 
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 15 * 1024 * 1024 } });
 router.use(express.json({ limit: "2mb" }));
+
+// These are the reviewer/engineer routes — signed-in only. The client requires "who approved it" on
+// every entry, so every transition below records an identity.
+const canRead = auth.requirePermission("knowledge.read");
+const canEdit = auth.requirePermission("knowledge.edit");
+const canDelete = auth.requirePermission("knowledge.delete");
+const canSubmit = auth.requirePermission("knowledge.submit");
+const canApprove = auth.requirePermission("knowledge.approve");
 
 async function versionIdFor(entryId) {
   const { data: entry } = await supabase.from("ceks_knowledge_entries").select("current_version_id").eq("id", entryId).single();
@@ -16,7 +25,7 @@ async function versionIdFor(entryId) {
 }
 
 /** GET /api/review/drafts?status=draft|under_review|all */
-router.get("/drafts", async (req, res) => {
+router.get("/drafts", canRead, async (req, res) => {
   try {
     const status = req.query.status || "pending";
     let q = supabase.from("ceks_knowledge_entries").select("*").order("created_at", { ascending: false });
@@ -31,7 +40,7 @@ router.get("/drafts", async (req, res) => {
 });
 
 /** DELETE /api/entries/:id  — remove an entry (cascades versions/attributes/links) */
-router.delete("/entries/:id", async (req, res) => {
+router.delete("/entries/:id", canDelete, async (req, res) => {
   try {
     const { error } = await supabase.from("ceks_knowledge_entries").delete().eq("id", req.params.id);
     if (error) throw new Error(error.message);
@@ -42,7 +51,7 @@ router.delete("/entries/:id", async (req, res) => {
 });
 
 /** GET /api/entries/:id  full detail */
-router.get("/entries/:id", async (req, res) => {
+router.get("/entries/:id", canRead, async (req, res) => {
   try {
     const detail = await getEntryDetail(req.params.id);
     if (!detail) return res.status(404).json({ error: "Not found" });
@@ -53,7 +62,7 @@ router.get("/entries/:id", async (req, res) => {
 });
 
 /** PATCH /api/entries/:id/identity — correct equipment identity (brand/category/type/series/model/power) */
-router.patch("/entries/:id/identity", async (req, res) => {
+router.patch("/entries/:id/identity", canEdit, async (req, res) => {
   try {
     const result = await updateEntryIdentity(req.params.id, req.body || {});
     res.json({ ok: true, ...result });
@@ -63,7 +72,7 @@ router.patch("/entries/:id/identity", async (req, res) => {
 });
 
 /** GET /api/entries/:id/find-documents — suggest sources for any missing document types */
-router.get("/entries/:id/find-documents", async (req, res) => {
+router.get("/entries/:id/find-documents", canRead, async (req, res) => {
   try {
     const d = await getEntryDetail(req.params.id);
     if (!d) return res.status(404).json({ error: "Not found" });
@@ -86,7 +95,7 @@ router.get("/entries/:id/find-documents", async (req, res) => {
 });
 
 /** GET /api/entries/:id/history — full approval history across versions */
-router.get("/entries/:id/history", async (req, res) => {
+router.get("/entries/:id/history", canRead, async (req, res) => {
   try {
     const { data: versions } = await supabase
       .from("ceks_knowledge_versions")
@@ -109,7 +118,7 @@ router.get("/entries/:id/history", async (req, res) => {
 });
 
 /** PATCH /api/attributes/:id  { name, value, unit, verified } — engineer correction */
-router.patch("/attributes/:id", async (req, res) => {
+router.patch("/attributes/:id", canEdit, async (req, res) => {
   try {
     const allowed = ["name", "value", "unit", "verified", "attr_group"];
     const patch = {};
@@ -128,7 +137,7 @@ router.patch("/attributes/:id", async (req, res) => {
 });
 
 /** POST /api/entries/:id/attributes  { attr_group, name, value, unit } — add a field (fills a required slot) */
-router.post("/entries/:id/attributes", async (req, res) => {
+router.post("/entries/:id/attributes", canEdit, async (req, res) => {
   try {
     const versionId = await versionIdFor(req.params.id);
     if (!versionId) return res.status(404).json({ error: "Entry has no version." });
@@ -147,7 +156,7 @@ router.post("/entries/:id/attributes", async (req, res) => {
 });
 
 /** POST /api/attributes/:id/photo  (multipart: image) — attach a component photo to a field */
-router.post("/attributes/:id/photo", upload.single("image"), async (req, res) => {
+router.post("/attributes/:id/photo", canEdit, upload.single("image"), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: "No image uploaded." });
     const ext = (req.file.originalname.split(".").pop() || "png").toLowerCase();
@@ -166,7 +175,7 @@ router.post("/attributes/:id/photo", upload.single("image"), async (req, res) =>
 });
 
 /** DELETE /api/attributes/:id */
-router.delete("/attributes/:id", async (req, res) => {
+router.delete("/attributes/:id", canEdit, async (req, res) => {
   try {
     const { error } = await supabase.from("ceks_knowledge_attributes").delete().eq("id", req.params.id);
     if (error) throw new Error(error.message);
@@ -176,11 +185,13 @@ router.delete("/attributes/:id", async (req, res) => {
   }
 });
 
-async function transition(entryId, toStatus, comment) {
+async function transition(entryId, toStatus, comment, actor) {
   const { data: entry, error } = await supabase.from("ceks_knowledge_entries").select("*").eq("id", entryId).single();
   if (error) throw new Error(error.message);
   const patch = { current_status: toStatus, updated_at: new Date().toISOString() };
-  if (toStatus === "approved") patch.approved_at = new Date().toISOString();
+  // The client requires an identity on every transition — this is the whole reason auth exists here.
+  if (toStatus === "approved") { patch.approved_at = new Date().toISOString(); patch.approved_by = actor?.id || null; }
+  if (toStatus === "under_review") patch.reviewed_by = actor?.id || null;
   await supabase.from("ceks_knowledge_entries").update(patch).eq("id", entryId);
   if (entry.current_version_id) {
     await supabase.from("ceks_knowledge_versions").update({ status: toStatus }).eq("id", entry.current_version_id);
@@ -188,6 +199,7 @@ async function transition(entryId, toStatus, comment) {
       version_id: entry.current_version_id,
       from_status: entry.current_status,
       to_status: toStatus,
+      changed_by: actor?.id || null,
       comment: comment || null,
     });
   }
@@ -195,9 +207,9 @@ async function transition(entryId, toStatus, comment) {
 }
 
 /** POST /api/entries/:id/submit */
-router.post("/entries/:id/submit", async (req, res) => {
+router.post("/entries/:id/submit", canSubmit, async (req, res) => {
   try {
-    await transition(req.params.id, "under_review", req.body.comment);
+    await transition(req.params.id, "under_review", req.body.comment, req.user);
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -205,9 +217,9 @@ router.post("/entries/:id/submit", async (req, res) => {
 });
 
 /** POST /api/entries/:id/reject  { comment } */
-router.post("/entries/:id/reject", async (req, res) => {
+router.post("/entries/:id/reject", canApprove, async (req, res) => {
   try {
-    await transition(req.params.id, "rejected", req.body.comment);
+    await transition(req.params.id, "rejected", req.body.comment, req.user);
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -215,9 +227,9 @@ router.post("/entries/:id/reject", async (req, res) => {
 });
 
 /** POST /api/entries/:id/approve — approve + index into Chroma (best-effort) */
-router.post("/entries/:id/approve", async (req, res) => {
+router.post("/entries/:id/approve", canApprove, async (req, res) => {
   try {
-    await transition(req.params.id, "approved", req.body.comment);
+    await transition(req.params.id, "approved", req.body.comment, req.user);
     const detail = await getEntryDetail(req.params.id);
 
     // best-effort semantic index
@@ -254,7 +266,7 @@ function entryToText(detail) {
 }
 
 /** POST /api/reindex — (re)build the Chroma index for ALL approved entries */
-router.post("/reindex", async (req, res) => {
+router.post("/reindex", canApprove, async (req, res) => {
   try {
     const { data, error } = await supabase
       .from("ceks_knowledge_entries")

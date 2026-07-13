@@ -1,11 +1,39 @@
 const express = require("express");
 const OpenAI = require("openai");
 const { env } = require("../config/env");
+const { supabase } = require("../config/supabase");
 const { getEntryDetail } = require("../utils/detail");
+const auth = require("../services/auth");
 
 const router = express.Router();
 router.use(express.json({ limit: "1mb" }));
 const client = new OpenAI({ apiKey: env.openaiKey || "sk-placeholder-set-in-env" });
+
+/**
+ * The assistant is PUBLIC by design for APPROVED equipment — the client's portal reads approved
+ * knowledge without a login, and asking the AI about it is part of reading it. But an UNAPPROVED
+ * (draft/under-review) entry must NOT be answerable anonymously — that would expose data an engineer
+ * has not signed off. So: approved → open; anything else → must be signed in with knowledge.read.
+ * This also stops the OpenAI cost of drafts leaking to the public internet.
+ */
+async function gateEntry(req, res, next) {
+  try {
+    const { data: entry } = await supabase
+      .from("ceks_knowledge_entries")
+      .select("current_status")
+      .eq("id", req.params.id)
+      .maybeSingle();
+    if (!entry) return res.status(404).json({ error: "Entry not found" });
+    if (entry.current_status === "approved") return next(); // public
+    if (!req.user) return res.status(401).json({ error: "Sign in to ask about equipment that is not yet approved." });
+    if (!(req.user.permissions || []).includes("knowledge.read")) {
+      return res.status(403).json({ error: "You do not have permission to view this equipment." });
+    }
+    next();
+  } catch (e) {
+    res.status(500).json({ error: "Something went wrong." });
+  }
+}
 
 const SYSTEM =
   "You are an MEP engineering assistant for CULINOVA EOS. You answer ONLY using the equipment data provided, " +
@@ -48,7 +76,7 @@ async function answer(entryId, question) {
 }
 
 /** POST /api/entries/:id/ask  { question } */
-router.post("/entries/:id/ask", async (req, res) => {
+router.post("/entries/:id/ask", gateEntry, async (req, res) => {
   try {
     const q = (req.body.question || "").trim();
     if (!q) return res.status(400).json({ error: "Question is required." });
@@ -57,7 +85,7 @@ router.post("/entries/:id/ask", async (req, res) => {
 });
 
 /** POST /api/entries/:id/summary — installation summary */
-router.post("/entries/:id/summary", async (req, res) => {
+router.post("/entries/:id/summary", gateEntry, async (req, res) => {
   try {
     res.json({ answer: await answer(req.params.id,
       "Generate a concise installation summary covering electrical, water/drain, gas, ventilation, and clearance requirements.") });
@@ -65,7 +93,7 @@ router.post("/entries/:id/summary", async (req, res) => {
 });
 
 /** POST /api/entries/:id/engineering-notes — generated engineering notes */
-router.post("/entries/:id/engineering-notes", async (req, res) => {
+router.post("/entries/:id/engineering-notes", gateEntry, async (req, res) => {
   try {
     res.json({ answer: await answer(req.params.id,
       "List the key engineering design recommendations, operational recommendations, and limitations for installing and running this equipment.") });

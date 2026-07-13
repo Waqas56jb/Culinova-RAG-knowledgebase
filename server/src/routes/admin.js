@@ -1,14 +1,18 @@
 const express = require("express");
 const { supabase } = require("../config/supabase");
 const { approveAndIndex, setStatus } = require("../utils/workflow");
+const auth = require("../services/auth");
 
 const router = express.Router();
 router.use(express.json({ limit: "1mb" }));
 
+const canRead = auth.requirePermission("knowledge.read");
+const canApprove = auth.requirePermission("knowledge.approve");
+
 const SORTABLE = ["title", "created_at", "updated_at", "current_status", "brand", "category", "model_number"];
 
 /** GET /api/admin/entries — search + filter + sort + paginate over all entries. */
-router.get("/entries", async (req, res) => {
+router.get("/entries", canRead, async (req, res) => {
   try {
     const { search, status, brand, category, equipment_type, power_type, origin } = req.query;
     const sort = SORTABLE.includes(req.query.sort) ? req.query.sort : "updated_at";
@@ -42,7 +46,7 @@ router.get("/entries", async (req, res) => {
  * Dependent (faceted) filters: each facet's options are narrowed by the
  * selections above it (category → brand → type → power).
  */
-router.get("/filters", async (req, res) => {
+router.get("/filters", canRead, async (req, res) => {
   try {
     const { category, brand, equipment_type } = req.query;
     const { data } = await supabase.from("ceks_knowledge_entries").select("category,brand,equipment_type,power_type");
@@ -63,7 +67,7 @@ router.get("/filters", async (req, res) => {
 });
 
 /** GET /api/admin/stats — dashboard statistics. */
-router.get("/stats", async (_req, res) => {
+router.get("/stats", canRead, async (_req, res) => {
   try {
     const { data } = await supabase.from("ceks_knowledge_entries").select("current_status,category,brand,power_type");
     const rows = data || [];
@@ -81,7 +85,7 @@ router.get("/stats", async (_req, res) => {
 });
 
 /** POST /api/admin/bulk-approve  { ids: [] } */
-router.post("/bulk-approve", async (req, res) => {
+router.post("/bulk-approve", canApprove, async (req, res) => {
   try {
     const ids = Array.isArray(req.body.ids) ? req.body.ids : [];
     let approved = 0;
@@ -95,7 +99,7 @@ router.post("/bulk-approve", async (req, res) => {
 });
 
 /** POST /api/admin/bulk-reject  { ids: [], comment } */
-router.post("/bulk-reject", async (req, res) => {
+router.post("/bulk-reject", canApprove, async (req, res) => {
   try {
     const ids = Array.isArray(req.body.ids) ? req.body.ids : [];
     let done = 0;
