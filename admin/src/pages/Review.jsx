@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { api } from "../api.js";
-<<<<<<< HEAD
+import { api, session } from "../api.js";
 import MEPDiagram from "@shared/components/MEPDiagram.jsx";
 import AIAssistant from "@shared/components/AIAssistant.jsx";
 import Recommendations from "../components/Recommendations.jsx";
@@ -9,65 +8,6 @@ import { Btn, PageLoader } from "../components/Loader.jsx";
 import { PagePanel } from "../components/PageShell.jsx";
 import { normName, fieldMatch, buildSectionRows, planSections } from "@shared/lib/sections.js";
 import { resolveStorageUrl, isFramableStorageUrl } from "@shared/lib/storageUrl.js";
-=======
-import MEPDiagram from "../components/MEPDiagram.jsx";
-import AIAssistant from "../components/AIAssistant.jsx";
-import Recommendations from "../components/Recommendations.jsx";
-import { Btn, PageLoader } from "../components/Loader.jsx";
-import { PagePanel } from "../components/PageShell.jsx";
-
-const SECTIONS = [
-  ["technical_specification", "Technical Specifications"],
-  ["electrical", "Electrical Design"],
-  ["water_drain", "Water / Drain Requirements"],
-  ["gas", "Gas Requirements"],
-  ["ventilation", "Ventilation Requirements"],
-  ["dimensions_clearance", "Dimensions & Clearances"],
-  ["connection_point", "MEP Connection Points"],
-  ["installation", "Installation Requirements"],
-  ["other", "Other"],
-];
-
-// Canonical engineering checklist (from the engineering requirements). Every field below
-// is ALWAYS shown for its section — filled from extracted data, or left blank for the
-// engineer to complete. { photo:true } fields accept a component photo upload.
-const REQUIRED_FIELDS = {
-  technical_specification: ["Capacity", "Material", "Operating Temperature"],
-  electrical: [
-    "Voltage", "Frequency", "Total Power",
-    "Socket Type", "Socket Rating", "Socket Installation Height (from finished floor)", { name: "Socket Photo", photo: true },
-    "Isolator Switch Type", "Isolator Switch Rating", "Isolator Installation Height (from finished floor)", { name: "Isolator Switch Photo", photo: true },
-    "Recommended Cable Size", "Recommended Circuit Breaker",
-    "Cable Entry Location (Bottom / Rear / Top)", "Electrical Connection Position",
-  ],
-  water_drain: [
-    "Cold Water Connection Type", "Cold Water Diameter", "Cold Water Height (from finished floor)",
-    "Hot Water Connection Type", "Hot Water Diameter", "Hot Water Height (from finished floor)",
-    "Drain Connection Type", "Drain Diameter", "Drain Height (from finished floor)", "Drain Method (Gravity / Pumped)",
-  ],
-  gas: [
-    "Gas Connection Diameter", "Gas Connection Height (from finished floor)",
-    "Gas Type (NG / LPG)", "Required Gas Pressure", "Gas Consumption",
-  ],
-  ventilation: [
-    "Exhaust Airflow (CFM or m³/h)", "Fresh Air Requirement", "Heat Rejection", "Steam Exhaust Requirement", "Hood Requirement",
-  ],
-  dimensions_clearance: [
-    "Overall Dimensions", "Machine Weight",
-    "Rear Clearance", "Left Clearance", "Right Clearance", "Top Clearance", "Front Service Clearance", "Floor Fixing Requirements",
-  ],
-  connection_point: [],
-  installation: ["Indoor / Outdoor", "Floor Requirements", "Mounting"],
-  other: [],
-};
-const REQ_LABEL = (f) => (typeof f === "string" ? f : f.name);
-const normName = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
-const fieldMatch = (attrName, canonical) => {
-  const a = normName(attrName), c = normName(canonical);
-  if (!a || !c) return false;
-  return a === c || a.startsWith(c) || c.startsWith(a);
-};
->>>>>>> bc87eb820bc0f636a95c3d98dfef902ce9843d54
 
 export default function Review({ id, onBack }) {
   const [d, setD] = useState(null);
@@ -199,6 +139,8 @@ export default function Review({ id, onBack }) {
 
       <Recommendations entryId={id} />
 
+      <CategoryStandardPanel initial={d.category_standard} entryId={id} />
+
       {groups.electrical || groups.water_drain || groups.gas || groups.ventilation || groups.connection_point ? (
         <div className="group">
           <h2>MEP Connection Layout</h2>
@@ -233,7 +175,6 @@ export default function Review({ id, onBack }) {
 
       {canDecide && (
         <div className="decision">
-<<<<<<< HEAD
           <Btn className="primary" disabled={busy} onClick={() => { setActionErr(""); setModal({ type: "approve" }); }}>Approve</Btn>
           {status === "draft" && <Btn loading={busy && !modal} disabled={busy} onClick={() => runAction("submit")}>Submit for review</Btn>}
           <Btn className="danger" disabled={busy} onClick={() => { setActionErr(""); setModal({ type: "reject" }); }}>Reject</Btn>
@@ -278,13 +219,6 @@ export default function Review({ id, onBack }) {
           onCancel={() => { if (!busy) { setModal(null); setActionErr(""); } }}
         />
       )}
-=======
-          <Btn className="primary" loading={busy} onClick={() => doAction("approve")}>Approve</Btn>
-          {status === "draft" && <Btn loading={busy} onClick={() => doAction("submit")}>Submit for review</Btn>}
-          <Btn className="danger" loading={busy} onClick={() => doAction("reject")}>Reject</Btn>
-        </div>
-      )}
->>>>>>> bc87eb820bc0f636a95c3d98dfef902ce9843d54
     </PagePanel>
   );
 }
@@ -292,6 +226,141 @@ export default function Review({ id, onBack }) {
 function ConfBadge({ c }) {
   const cls = c >= 0.8 ? "hi" : c >= 0.5 ? "mid" : "lo";
   return <span className={"conf " + cls}>{Math.round(c * 100)}%</span>;
+}
+
+// ── CULINOVA Category Standard ────────────────────────────────────────────────
+// Surfaces detail.category_standard (same shape as /for-equipment/:id): the matched
+// category profile and its applied requirements, or the suggested candidates to link.
+const MATCH_META = {
+  linked: { cls: "approved", label: "Linked" },
+  exact: { cls: "approved", label: "Exact match" },
+  auto: { cls: "published", label: "Auto-matched" },
+  suggested: { cls: "under_review", label: "Suggested" },
+  none: { cls: "draft", label: "No match" },
+};
+const fmtScore = (s) => (s == null ? "" : s <= 1 ? `${Math.round(s * 100)}%` : `${s}`);
+
+function CategoryStandardPanel({ initial, entryId }) {
+  const [cs, setCs] = useState(initial || null);
+  const [busy, setBusy] = useState("");   // holds the id being linked, or "unlink"
+  const [err, setErr] = useState("");
+  const canLink = session.can("knowledge.edit");
+
+  // keep in sync if the parent reloads the entry with a fresh category_standard
+  useEffect(() => { setCs(initial || null); }, [initial]);
+
+  if (!cs) return null;
+
+  async function link(profile_id, key) {
+    setBusy(key); setErr("");
+    try { setCs(await api.linkCategoryProfile(entryId, profile_id)); }
+    catch (e) { setErr(e.message); } finally { setBusy(""); }
+  }
+
+  const match = MATCH_META[cs.match] || { cls: "draft", label: cs.match || "—" };
+  const applied = cs.applied || {};
+  const requirements = applied.requirements || [];
+  const manufacturer = applied.manufacturer_sourced || [];
+  const pending = applied.pending || [];
+  const options = applied.options || [];
+  const candidates = cs.candidates || [];
+
+  return (
+    <div className="group">
+      <h2>CULINOVA Category Standard <span className={"badge " + match.cls} style={{ marginLeft: 8 }}>{match.label}</span></h2>
+
+      {err && <div className="alert" role="alert">{err}</div>}
+
+      {cs.profile ? (
+        <>
+          <div className="std-head">
+            <span className="pill culinova">{cs.profile.category_name || "Category"}</span>
+            {cs.profile.code && <span className="mono">{cs.profile.code}</span>}
+            {cs.linked && canLink && (
+              <button className="btn small ghost" disabled={busy === "unlink"} onClick={() => link(null, "unlink")}>
+                {busy === "unlink" ? "Unlinking…" : "Unlink"}
+              </button>
+            )}
+          </div>
+
+          {requirements.length > 0 && (
+            <div className="scroll-x">
+              <table className="grid">
+                <thead><tr><th>Requirement</th><th>Value</th></tr></thead>
+                <tbody>
+                  {requirements.map((r, i) => (
+                    <tr key={i}>
+                      <td>{r.attribute || "—"}</td>
+                      <td>{r.kind === "policy" ? (r.applies ? "Yes" : "No") : (r.value || "—")}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {options.length > 0 && (
+            <p className="muted" style={{ marginTop: 8 }}>
+              <b>Options:</b> {options.map((o) => `${o.attribute}: ${o.value}`).join(" · ")}
+            </p>
+          )}
+
+          <p className="muted" style={{ marginTop: 8 }}>
+            {manufacturer.length} value{manufacturer.length === 1 ? "" : "s"} sourced from the manufacturer datasheet.
+          </p>
+
+          {pending.length > 0 && (
+            <>
+              <div className="warn">⚠ {pending.length} requirement{pending.length === 1 ? "" : "s"} awaiting the client's discipline rule tables — no value can be applied yet.</div>
+              <div className="scroll-x">
+                <table className="grid">
+                  <thead><tr><th>Requirement</th><th>Needs</th><th>Discipline</th></tr></thead>
+                  <tbody>
+                    {pending.map((p, i) => (
+                      <tr key={i} className="std-pending">
+                        <td>{p.attribute || "—"}<span className="badge pending" style={{ marginLeft: 8 }}>Pending</span></td>
+                        <td>{p.needs || "—"}</td>
+                        <td>{p.discipline || "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+        </>
+      ) : (
+        <>
+          <p className="muted">No category standard is linked to this model yet.{candidates.length ? " Pick the best match below:" : ""}</p>
+          {candidates.length > 0 ? (
+            <div className="scroll-x">
+              <table className="grid">
+                <thead><tr><th>Suggested category</th><th>Match</th><th>Why</th>{canLink && <th></th>}</tr></thead>
+                <tbody>
+                  {candidates.map((c) => (
+                    <tr key={c.id}>
+                      <td>{c.category_name || "—"} {c.code && <span className="mono">{c.code}</span>}</td>
+                      <td>{fmtScore(c.score) || "—"}</td>
+                      <td className="muted">{c.reason || "—"}</td>
+                      {canLink && (
+                        <td className="rowacts">
+                          <button className="btn small primary" disabled={!!busy} onClick={() => link(c.id, c.id)}>
+                            {busy === c.id ? "Linking…" : "Link"}
+                          </button>
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="muted">No matching category profile was found for this equipment.</p>
+          )}
+        </>
+      )}
+    </div>
+  );
 }
 
 // Renders a full section: canonical required fields (filled or blank) + any extra extracted fields.

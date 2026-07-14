@@ -15,6 +15,7 @@ const adminRoutes = require("./routes/admin");
 const assistantRoutes = require("./routes/assistant");
 const authRoutes = require("./routes/auth");
 const ruleRoutes = require("./routes/rules");
+const standardsRoutes = require("./routes/standards");
 const dictionaryRoutes = require("./routes/dictionary");
 const recommendationRoutes = require("./routes/recommendations");
 const projectRoutes = require("./routes/projects");
@@ -106,6 +107,7 @@ app.get("/api/health/ready", async (_req, res) => {
 // ── authentication & the engineering platform (all guarded) ──────────────────
 app.use("/api/auth", authLimiter, authRoutes);
 app.use("/api/rules", ruleRoutes);
+app.use("/api/standards", standardsRoutes);
 app.use("/api/dictionary", dictionaryRoutes);
 app.use("/api/recommendations", recommendationRoutes);
 app.use("/api/projects", projectRoutes);

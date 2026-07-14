@@ -60,6 +60,19 @@ function buildContext(d) {
     rows.forEach((a) => (ctx += `- ${a.name}: ${a.value ?? ""} ${a.unit ?? ""} (${a.source_document || "?"} p.${a.source_page ?? "?"})\n`));
   }
   if (d.notes?.length) { ctx += "\n[engineering notes]\n"; d.notes.forEach((n) => (ctx += `- ${n.content}\n`)); }
+
+  // the approved CULINOVA category standard governing this equipment — a source the AI may cite
+  const cs = d.category_standard;
+  if (cs && cs.linked && cs.applied) {
+    ctx += `\n\nCULINOVA CATEGORY STANDARD: ${cs.profile.category_name} (${cs.profile.code}${cs.profile.version ? ", " + cs.profile.version : ""})\n`;
+    const req = cs.applied.requirements.filter((r) => r.kind !== "policy" || r.applies);
+    if (req.length) { ctx += "[required by the CULINOVA standard]\n"; req.forEach((r) => (ctx += `- ${r.attribute}: ${r.value}\n`)); }
+    if (cs.applied.pending.length) {
+      ctx += "[PENDING — the CULINOVA rule table / formula for these is not yet available. Do NOT invent values; say they require the discipline rules.]\n";
+      cs.applied.pending.forEach((p) => (ctx += `- ${p.attribute}: needs ${p.needs}\n`));
+    }
+  }
+
   ctx += "\nAVAILABLE DOCUMENTS: " + (d.documents || []).map((x) => x.doc_type).join(", ");
   return ctx;
 }

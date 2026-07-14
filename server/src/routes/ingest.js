@@ -13,6 +13,7 @@ const { persistDraft } = require("../utils/draft");
 const auth = require("../services/auth");
 const dictSvc = require("../services/params");
 const recs = require("../services/recommendations");
+const categoryProfiles = require("../services/categoryProfiles");
 
 /**
  * Client item 2 — "after EOS extracts the equipment information, it should automatically compare the
@@ -21,6 +22,9 @@ const recs = require("../services/recommendations");
  * lose an upload — the engineer can always run it again from the Review screen.
  */
 async function autoApplyRules(entryId, actor) {
+  // Bind the equipment to its CULINOVA category standard on an EXACT type match — independent of the
+  // rules-engine setting, best-effort so it can never fail an upload.
+  try { await categoryProfiles.autoLink(entryId); } catch (e) { console.warn("[ingest] category auto-link failed:", e.message); }
   try {
     const dict = await dictSvc.load();
     if (!dictSvc.settingBool(dict, "auto_apply_on_extract", true)) return null;

@@ -8,6 +8,7 @@ const ACCENTS = {
   cyan: { emoji: "🏗️", label: "Projects" },
   rose: { emoji: "👥", label: "Users" },
   teal: { emoji: "🔍", label: "Review" },
+  sky: { emoji: "📐", label: "Engineering Standards" },
 };
 
 export function PageShell({ accent = "indigo", children }) {

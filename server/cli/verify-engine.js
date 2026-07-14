@@ -25,7 +25,35 @@ let pass = 0, fail = 0;
 const ok = (c, m) => { c ? (pass++, console.log("  ✓", m)) : (fail++, console.log("  ✗ FAIL", m)); };
 const S = (s) => console.log(`\n── ${s} ──`);
 
-const cleanup = { rules: [], constants: [], versionId: null, entryId: null };
+const cleanup = { rules: [], constants: [], versionId: null, entryId: null, inserted: [] };
+
+/**
+ * Remove everything this run created. Idempotent and guarded — safe to call on SUCCESS and again on a
+ * CRASH, so a mid-run failure can never leak the synthetic ZZ-VERIFY entry (which is exactly what
+ * happened once). Deletes by the ids collected in `cleanup`, so it never touches real data.
+ */
+async function cleanupAll() {
+  try {
+    if (cleanup.rules.length) await supabase.from("ceks_recalc_alerts").delete().in("rule_id", cleanup.rules);
+    if (cleanup.versionId) {
+      await supabase.from("ceks_recommendation_history").delete().eq("version_id", cleanup.versionId);
+      await supabase.from("ceks_recommendations").delete().eq("version_id", cleanup.versionId);
+      await supabase.from("ceks_validations").delete().eq("version_id", cleanup.versionId);
+    }
+    if (cleanup.inserted.length) await supabase.from("ceks_knowledge_attributes").delete().in("id", cleanup.inserted);
+    for (const id of cleanup.rules) {
+      await supabase.from("ceks_rule_conditions").delete().eq("rule_id", id);
+      await supabase.from("ceks_rule_outputs").delete().eq("rule_id", id);
+      await supabase.from("ceks_rule_versions").delete().eq("rule_id", id);
+      await supabase.from("ceks_rules").delete().eq("id", id);
+    }
+    if (cleanup.constants.length) await supabase.from("ceks_rule_constants").delete().in("id", cleanup.constants);
+    if (cleanup.versionId) await supabase.from("ceks_knowledge_versions").delete().eq("id", cleanup.versionId);
+    if (cleanup.entryId) await supabase.from("ceks_knowledge_entries").delete().eq("id", cleanup.entryId);
+  } catch (e) {
+    console.warn("  cleanup warning:", e.message);
+  }
+}
 
 // This verifier WRITES to the database it points at. It is fully self-cleaning and only ever creates
 // its own synthetic, ZZ-VERIFY-tagged records — it never touches a real entry — but writing to a
@@ -168,7 +196,7 @@ async function purgeLeftovers() {
     { name: "Power Load", value: "12", unit: "kW" },            // → current ≈ 19.2 A → inside 16–20
     { name: "Frequency", value: "50/60", unit: "Hz" },
   ];
-  const inserted = [];
+  const inserted = cleanup.inserted; // same array — cleanupAll() deletes these on success or crash
   for (const a of seedAttrs) {
     const { data } = await supabase.from("ceks_knowledge_attributes").insert({
       version_id: entry.current_version_id, attr_group: "electrical",
@@ -259,26 +287,15 @@ async function purgeLeftovers() {
 
   // ─────────────────────────────────────────────────────────────────────────
   S("CLEANUP");
-  await supabase.from("ceks_recalc_alerts").delete().in("rule_id", cleanup.rules);
-  await supabase.from("ceks_recommendation_history").delete().eq("version_id", cleanup.versionId);
-  await supabase.from("ceks_recommendations").delete().eq("version_id", cleanup.versionId);
-  await supabase.from("ceks_validations").delete().eq("version_id", cleanup.versionId);
-  await supabase.from("ceks_knowledge_attributes").delete().in("id", inserted);
-  for (const id of cleanup.rules) {
-    await supabase.from("ceks_rule_conditions").delete().eq("rule_id", id);
-    await supabase.from("ceks_rule_outputs").delete().eq("rule_id", id);
-    await supabase.from("ceks_rules").delete().eq("id", id);
-  }
-  await supabase.from("ceks_rule_constants").delete().in("id", cleanup.constants);
-  // remove the synthetic entry + version themselves (cascades any remaining children)
-  if (cleanup.versionId) await supabase.from("ceks_knowledge_versions").delete().eq("id", cleanup.versionId);
-  if (cleanup.entryId) await supabase.from("ceks_knowledge_entries").delete().eq("id", cleanup.entryId);
+  await cleanupAll();
   console.log("  every test rule, constant, attribute, recommendation AND the synthetic entry removed");
 
   console.log(`\n######## RESULT: ${pass} passed, ${fail} failed ########\n`);
   process.exit(fail ? 1 : 0);
-})().catch((e) => {
+})().catch(async (e) => {
   console.error("\n✖ VERIFICATION CRASHED:", e.message);
   console.error(e.stack);
+  // clean up even on a crash, so a failed run never leaves a synthetic entry behind
+  try { await cleanupAll(); console.error("  (test data cleaned up despite the crash)"); } catch {}
   process.exit(1);
 });

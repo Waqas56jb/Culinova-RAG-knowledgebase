@@ -11,6 +11,7 @@ const canRead = auth.requirePermission("knowledge.read");
 const canApprove = auth.requirePermission("knowledge.approve");
 
 const SORTABLE = ["title", "created_at", "updated_at", "current_status", "brand", "category", "model_number"];
+const UNSPECIFIED = "Unspecified"; // must match the NULL label used by ceks_entry_stats()
 
 /** GET /api/admin/entries — search + filter + sort + paginate over all entries. */
 router.get("/entries", canRead, async (req, res) => {
@@ -26,10 +27,16 @@ router.get("/entries", canRead, async (req, res) => {
       if (status === "pending") q = q.in("current_status", ["draft", "under_review"]);
       else q = q.eq("current_status", status);
     }
-    if (brand) q = q.eq("brand", brand);
-    if (category) q = q.eq("category", category);
-    if (equipment_type) q = q.eq("equipment_type", equipment_type);
-    if (power_type) q = q.eq("power_type", power_type);
+    // "Unspecified" is the DASHBOARD's label for a NULL value (see ceks_entry_stats). When the user
+    // filters by it, they mean "records that have no value here", i.e. IS NULL — not the literal text.
+    const applyFacet = (query, col, val) => {
+      if (!val) return query;
+      return val === UNSPECIFIED ? query.is(col, null) : query.eq(col, val);
+    };
+    q = applyFacet(q, "brand", brand);
+    q = applyFacet(q, "category", category);
+    q = applyFacet(q, "equipment_type", equipment_type);
+    q = applyFacet(q, "power_type", power_type);
     if (origin) q = q.eq("origin", origin);
     if (search) {
       const s = sanitizeSearch(search);

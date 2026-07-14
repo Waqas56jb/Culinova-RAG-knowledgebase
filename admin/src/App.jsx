@@ -6,6 +6,7 @@ import Drafts from "./pages/Drafts.jsx";
 import Review from "./pages/Review.jsx";
 import Dashboard from "./pages/Dashboard.jsx";
 import Rules from "./pages/Rules.jsx";
+import CategoryStandards from "./pages/CategoryStandards.jsx";
 import Dictionary from "./pages/Dictionary.jsx";
 import Projects from "./pages/Projects.jsx";
 import ProjectWorkspace from "./pages/ProjectWorkspace.jsx";
@@ -16,6 +17,7 @@ const TABS = [
   { key: "drafts", label: "Library", perm: "knowledge.read", accent: "indigo" },
   { key: "upload", label: "Import", perm: "knowledge.ingest", accent: "emerald" },
   { key: "rules", label: "Rules", perm: "rule.read", accent: "amber" },
+  { key: "standards", label: "Standards", perm: "rule.read", accent: "sky" },
   { key: "dictionary", label: "Dictionary", perm: "rule.read", accent: "violet" },
   { key: "projects", label: "Projects", perm: "project.read", accent: "cyan" },
   { key: "users", label: "Users", perm: "user.manage", accent: "rose" },
@@ -86,6 +88,7 @@ export default function App() {
         )}
         {view.name === "review" && <Review id={view.id} onBack={() => setView({ name: "drafts" })} />}
         {view.name === "rules" && <Rules />}
+        {view.name === "standards" && <CategoryStandards />}
         {view.name === "dictionary" && <Dictionary />}
         {view.name === "projects" && <Projects onOpen={(id) => setView({ name: "project", id })} />}
         {view.name === "project" && <ProjectWorkspace id={view.id} onBack={() => setView({ name: "projects" })} />}

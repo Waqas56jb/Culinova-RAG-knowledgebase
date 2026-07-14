@@ -20,68 +20,6 @@ export const session = {
   can: (perm) => !!(store.user && (store.user.permissions || []).includes(perm)),
 };
 
-<<<<<<< HEAD
-const authHeaders = () => (store.access ? { Authorization: `Bearer ${store.access}` } : {});
-
-/** fetch with bearer token; on 401 tries ONE refresh, then surfaces the sign-in screen */
-async function f(path, opts = {}, retry = true) {
-  const res = await fetch(`${API}${path}`, {
-    ...opts,
-    headers: { ...(opts.headers || {}), ...authHeaders() },
-  });
-  if (res.status === 401 && retry && store.refresh) {
-    const ok = await tryRefresh();
-    if (ok) return f(path, opts, false);
-=======
-async function j(res) {
-  if (!res.ok) {
-    let msg = res.statusText;
-    try { msg = (await res.json()).error || msg; } catch {}
-    const e = new Error(msg);
-    e.status = res.status;
-    throw e;
->>>>>>> bc87eb820bc0f636a95c3d98dfef902ce9843d54
-  }
-  if (res.status === 401) { signOutLocal(); }
-  return j(res);
-}
-
-async function tryRefresh() {
-  try {
-    const r = await fetch(`${API}/api/auth/refresh`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ refresh_token: store.refresh }),
-    });
-    if (!r.ok) return false;
-    const data = await r.json();
-    store.access = data.access_token;
-    store.user = data.user;
-    onAuthChange();
-    return true;
-  } catch { return false; }
-}
-
-function signOutLocal() {
-  store.access = ""; store.refresh = ""; store.user = null;
-  onAuthChange();
-}
-
-const jf = (path, body, method = "POST") =>
-  f(path, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body ?? {}) });
-
-/** authenticated file download (the API needs the bearer header, so plain <a href> can't be used) */
-async function download(path) {
-  const res = await fetch(`${API}${path}`, { headers: authHeaders() });
-  if (!res.ok) { let m = res.statusText; try { m = (await res.json()).error || m; } catch {} throw new Error(m); }
-  const blob = await res.blob();
-  const cd = res.headers.get("Content-Disposition") || "";
-  const name = /filename="?([^";]+)"?/.exec(cd)?.[1] || "export";
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url; a.download = name; a.click();
-  setTimeout(() => URL.revokeObjectURL(url), 5000);
-}
-
 const authHeaders = () => (store.access ? { Authorization: `Bearer ${store.access}` } : {});
 
 /** fetch with bearer token; on 401 tries ONE refresh, then surfaces the sign-in screen */
@@ -314,4 +252,21 @@ export const api = {
   updateAnnotation: (id, aid, body) => jf(`/api/drawings/${id}/annotations/${aid}`, body, "PATCH"),
   deleteAnnotation: (id, aid) => f(`/api/drawings/${id}/annotations/${aid}`, { method: "DELETE" }),
   saveDrawingRevision: (id, label) => jf(`/api/drawings/${id}/revisions`, { label }),
+
+  // ── category engineering standards ─────────────────────────────────────────
+  standardsProfiles: (domain) => f(`/api/standards/category-profiles?${new URLSearchParams(domain ? { domain } : {})}`),
+  standardsProfile: (id) => f(`/api/standards/category-profiles/${id}`),
+  standardsPending: () => f(`/api/standards/pending`),
+  standardsImportPreview: (file, domain) => {
+    const fd = new FormData(); fd.append("file", file);
+    if (domain) fd.append("domain", domain);
+    return f(`/api/standards/import/preview`, { method: "POST", body: fd });
+  },
+  standardsImportCommit: (file, domain) => {
+    const fd = new FormData(); fd.append("file", file);
+    if (domain) fd.append("domain", domain);
+    return f(`/api/standards/import/commit`, { method: "POST", body: fd });
+  },
+  standardsForEquipment: (entryId) => f(`/api/standards/for-equipment/${entryId}`),
+  linkCategoryProfile: (entryId, profile_id) => jf(`/api/standards/for-equipment/${entryId}/link`, { profile_id }),
 };

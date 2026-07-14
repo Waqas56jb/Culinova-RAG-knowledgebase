@@ -143,6 +143,7 @@ input:focus, select:focus {
 .tab-violet { --tab-accent: #8b5cf6; --tab-accent-2: #7c3aed; }
 .tab-cyan { --tab-accent: #06b6d4; --tab-accent-2: #0891b2; }
 .tab-rose { --tab-accent: #f43f5e; --tab-accent-2: #e11d48; }
+.tab-sky { --tab-accent: #0ea5e9; --tab-accent-2: #0284c7; }
 
 .group > h2 {
   display: flex;
@@ -241,6 +242,7 @@ input:focus, select:focus {
 .page-accent-cyan { --accent: #06b6d4; --accent-2: #0891b2; --accent-soft: rgba(6, 182, 212, 0.1); --accent-glow: rgba(6, 182, 212, 0.35); --accent-gradient: linear-gradient(90deg, #22d3ee, #0891b2); }
 .page-accent-rose { --accent: #f43f5e; --accent-2: #e11d48; --accent-soft: rgba(244, 63, 94, 0.1); --accent-glow: rgba(244, 63, 94, 0.35); --accent-gradient: linear-gradient(90deg, #fb7185, #e11d48); }
 .page-accent-teal { --accent: #14b8a6; --accent-2: #0d9488; --accent-soft: rgba(20, 184, 166, 0.1); --accent-glow: rgba(20, 184, 166, 0.35); --accent-gradient: linear-gradient(90deg, #2dd4bf, #0d9488); }
+.page-accent-sky { --accent: #0ea5e9; --accent-2: #0284c7; --accent-soft: rgba(14, 165, 233, 0.1); --accent-glow: rgba(14, 165, 233, 0.35); --accent-gradient: linear-gradient(90deg, #38bdf8, #0284c7); }
 
 .page-hero {
   display: flex;
@@ -1507,6 +1509,15 @@ label.check { flex-direction: row !important; align-items: center; gap: 8px; fon
 .badge.superseded, .badge.archived { background: #eef0f2; color: #6b7280; }
 .badge.published { background: #e6f0fb; color: #1f4e79; }
 .pill.culinova { background: #e2f3ec; color: #1f6b4c; }
+
+/* ---------------- Category Engineering Standards ---------------- */
+.badge.pending { background: #fef3c7; color: #b45309; border: 1px solid #fde68a; }
+tr.std-pending td { background: #fffdf5; }
+.std-pills { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 6px 0; }
+.std-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 4px 0 12px; }
+.std-checklist { margin: 4px 0 0; padding-left: 20px; }
+.std-checklist li { padding: 3px 0; font-size: 13px; color: var(--ink); }
+.std-notes { font-size: 13px; color: var(--steel); white-space: pre-line; margin: 4px 0 0; }
 .rec-line { font-size: 13px; padding: 3px 0; }
 
 /* ---------------- Rule editor ---------------- */
