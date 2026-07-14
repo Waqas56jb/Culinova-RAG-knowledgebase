@@ -13,6 +13,8 @@ const authRoutes = require("./routes/auth");
 const ruleRoutes = require("./routes/rules");
 const dictionaryRoutes = require("./routes/dictionary");
 const recommendationRoutes = require("./routes/recommendations");
+const projectRoutes = require("./routes/projects");
+const drawingRoutes = require("./routes/drawings");
 
 assertConfig();
 
@@ -57,6 +59,8 @@ app.use("/api/auth", authRoutes);
 app.use("/api/rules", ruleRoutes);
 app.use("/api/dictionary", dictionaryRoutes);
 app.use("/api/recommendations", recommendationRoutes);
+app.use("/api/projects", projectRoutes);
+app.use("/api/drawings", drawingRoutes);
 
 // ── knowledge management (now guarded per-route) ─────────────────────────────
 app.use("/api/ingest", ingestRoutes);

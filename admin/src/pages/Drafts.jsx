@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { api } from "../api.js";
+import { PageLoader } from "../components/Loader.jsx";
+import { EmptyState, PageHero, PagePanel, StatPill } from "../components/PageShell.jsx";
 
 const STATUS_LABEL = { draft: "Draft", under_review: "Under Review", approved: "Approved", rejected: "Rejected" };
 const STATUS_OPTS = [["pending", "Pending"], ["approved", "Approved"], ["rejected", "Rejected"], ["all", "All"]];
@@ -68,11 +70,13 @@ export default function Drafts({ onOpen, initialFilter }) {
   );
 
   return (
-    <div className="panel">
-      <div className="panel-head">
-        <h1>Knowledge Library</h1>
-        <div className="muted">{total} model{total === 1 ? "" : "s"}</div>
-      </div>
+    <PagePanel accent="indigo">
+      <PageHero
+        accent="indigo"
+        title="Knowledge Library"
+        subtitle="Browse, filter and approve engineering equipment models."
+        badge={<StatPill>{total} model{total === 1 ? "" : "s"}</StatPill>}
+      />
 
       <div className="lib-toolbar">
         <input className="search-input" placeholder="Search model, brand, code…" value={f.search}
@@ -95,7 +99,9 @@ export default function Drafts({ onOpen, initialFilter }) {
       )}
 
       {error && <div className="alert">{error}</div>}
-      {!loading && !items.length && <div className="muted">No models match these filters.</div>}
+      {!loading && !items.length && (
+        <EmptyState icon="📦" title="No models found" text="Try changing your filters or import new equipment." />
+      )}
 
       {items.length > 0 && (
         <div className="scroll-x">
@@ -130,10 +136,10 @@ export default function Drafts({ onOpen, initialFilter }) {
         </div>
       )}
 
-      {loading && <div className="muted center">Loading…</div>}
+      {loading && <PageLoader label="Loading library…" />}
       {!loading && items.length < total && (
         <div className="center"><button className="btn" onClick={() => load(page + 1, true)}>Load more</button></div>
       )}
-    </div>
+    </PagePanel>
   );
 }

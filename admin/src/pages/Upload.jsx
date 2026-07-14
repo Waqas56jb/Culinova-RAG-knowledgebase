@@ -1,5 +1,7 @@
 import React, { useState, useMemo } from "react";
 import { api } from "../api.js";
+import { Btn } from "../components/Loader.jsx";
+import { PageHero, PagePanel } from "../components/PageShell.jsx";
 
 const DOC_TYPES = [
   ["datasheet", "Datasheet"],
@@ -34,8 +36,12 @@ async function readDropped(dt) {
 export default function Upload({ onDone }) {
   const [mode, setMode] = useState("folder");
   return (
-    <div className="panel">
-      <h1>Import Knowledge</h1>
+    <PagePanel accent="emerald">
+      <PageHero
+        accent="emerald"
+        title="Import Knowledge"
+        subtitle="Add equipment from folders, Excel, PDFs, or manual entry."
+      />
       <div className="mode-tabs">
         <button className={mode === "folder" ? "mtab active" : "mtab"} onClick={() => setMode("folder")}>Folder / PDF (auto-organize)</button>
         <button className={mode === "excel" ? "mtab active" : "mtab"} onClick={() => setMode("excel")}>Excel Bulk Import</button>
@@ -46,7 +52,7 @@ export default function Upload({ onDone }) {
       {mode === "excel" && <ExcelUpload />}
       {mode === "files" && <SingleUpload onDone={onDone} />}
       {mode === "manual" && <ManualUpload onDone={onDone} />}
-    </div>
+    </PagePanel>
   );
 }
 
@@ -149,7 +155,7 @@ function ManualUpload({ onDone }) {
 
       {error && <div className="alert">{error}</div>}
       <div className="actions">
-        <button className="btn primary" disabled={busy} onClick={submit}>{busy ? "Saving…" : "Create Draft"}</button>
+        <Btn className="primary" loading={busy} onClick={submit}>Create Draft</Btn>
       </div>
     </div>
   );
@@ -222,9 +228,9 @@ function FolderUpload({ onDone }) {
         </div>
       )}
       <div className="actions">
-        <button className="btn primary" disabled={!models.length || busy} onClick={submit}>
-          {busy ? `Processing ${models.length} model(s)…` : `Extract & organize ${models.length || ""} model(s)`}
-        </button>
+        <Btn className="primary" loading={busy} disabled={!models.length} onClick={submit}>
+          {models.length ? `Extract & organize ${models.length} model(s)` : "Extract & organize"}
+        </Btn>
       </div>
       {busy && <p className="muted">AI is reading each document, extracting the product image, and building the profiles…</p>}
     </div>
@@ -274,7 +280,7 @@ function ExcelUpload() {
           {result.imported > 8 && <div className="muted">…and {result.imported - 8} more.</div>}
         </div>
       )}
-      <div className="actions"><button className="btn primary" disabled={!file || busy} onClick={submit}>{busy ? "Importing…" : "Import Excel"}</button></div>
+      <div className="actions"><Btn className="primary" loading={busy} disabled={!file} onClick={submit}>Import Excel</Btn></div>
     </div>
   );
 }
@@ -314,7 +320,7 @@ function SingleUpload({ onDone }) {
               <td className="narrow"><button className="x" onClick={() => removeFile(i)}>×</button></td></tr>))}</tbody></table></div>
       )}
       {error && <div className="alert">{error}</div>}
-      <div className="actions"><button className="btn primary" disabled={!files.length || busy} onClick={submit}>{busy ? "Extracting…" : "Extract & create Draft"}</button></div>
+      <div className="actions"><Btn className="primary" loading={busy} disabled={!files.length} onClick={submit}>Extract & create Draft</Btn></div>
     </div>
   );
 }
