@@ -1,8 +1,6 @@
-const OpenAI = require("openai");
 const { env } = require("../config/env");
+const { openai: client } = require("../config/openai");
 const { buildTaggedText } = require("./pdf");
-
-const client = new OpenAI({ apiKey: env.openaiKey || "sk-placeholder-set-in-env" });
 
 const EXTRACTION_SCHEMA = {
   name: "engineering_extraction",

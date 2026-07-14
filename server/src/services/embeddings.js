@@ -1,7 +1,5 @@
-const OpenAI = require("openai");
 const { env } = require("../config/env");
-
-const openai = new OpenAI({ apiKey: env.openaiKey || "sk-placeholder-set-in-env" });
+const { openai } = require("../config/openai");
 
 let chromaCollection = null;
 

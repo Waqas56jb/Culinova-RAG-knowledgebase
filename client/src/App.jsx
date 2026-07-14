@@ -1,71 +1,9 @@
 import React, { useEffect, useState } from "react";
 import { api } from "./api.js";
-import MEPDiagram from "./components/MEPDiagram.jsx";
-import AIAssistant from "./components/AIAssistant.jsx";
+import MEPDiagram from "@shared/components/MEPDiagram.jsx";
+import AIAssistant from "@shared/components/AIAssistant.jsx";
 import CADPreview from "./components/CADPreview.jsx";
-
-const SECTIONS = [
-  ["technical_specification", "Technical Specifications"],
-  ["electrical", "Electrical Design"],
-  ["water_drain", "Water / Drain Requirements"],
-  ["gas", "Gas Requirements"],
-  ["ventilation", "Ventilation Requirements"],
-  ["dimensions_clearance", "Dimensions & Clearances"],
-  ["connection_point", "MEP Connection Points"],
-  ["installation", "Installation Requirements"],
-  ["other", "Other"],
-];
-
-// Canonical engineering checklist — every field is shown (filled or marked "—"), read-only.
-const REQUIRED_FIELDS = {
-  technical_specification: ["Capacity", "Material", "Operating Temperature"],
-  electrical: [
-    "Voltage", "Frequency", "Total Power",
-    "Socket Type", "Socket Rating", "Socket Installation Height (from finished floor)", { name: "Socket Photo", photo: true },
-    "Isolator Switch Type", "Isolator Switch Rating", "Isolator Installation Height (from finished floor)", { name: "Isolator Switch Photo", photo: true },
-    "Recommended Cable Size", "Recommended Circuit Breaker",
-    "Cable Entry Location (Bottom / Rear / Top)", "Electrical Connection Position",
-  ],
-  water_drain: [
-    "Cold Water Connection Type", "Cold Water Diameter", "Cold Water Height (from finished floor)",
-    "Hot Water Connection Type", "Hot Water Diameter", "Hot Water Height (from finished floor)",
-    "Drain Connection Type", "Drain Diameter", "Drain Height (from finished floor)", "Drain Method (Gravity / Pumped)",
-  ],
-  gas: [
-    "Gas Connection Diameter", "Gas Connection Height (from finished floor)",
-    "Gas Type (NG / LPG)", "Required Gas Pressure", "Gas Consumption",
-  ],
-  ventilation: ["Exhaust Airflow (CFM or m³/h)", "Fresh Air Requirement", "Heat Rejection", "Steam Exhaust Requirement", "Hood Requirement"],
-  dimensions_clearance: [
-    "Overall Dimensions", "Machine Weight",
-    "Rear Clearance", "Left Clearance", "Right Clearance", "Top Clearance", "Front Service Clearance", "Floor Fixing Requirements",
-  ],
-  connection_point: [],
-  installation: ["Indoor / Outdoor", "Floor Requirements", "Mounting"],
-  other: [],
-};
-const REQ_LABEL = (f) => (typeof f === "string" ? f : f.name);
-const normName = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
-const fieldMatch = (attrName, canonical) => {
-  const a = normName(attrName), c = normName(canonical);
-  if (!a || !c) return false;
-  return a === c || a.startsWith(c) || c.startsWith(a);
-};
-// merge extracted rows against the canonical checklist → complete, ordered display rows
-function buildSectionRows(sectionKey, rows) {
-  const req = REQUIRED_FIELDS[sectionKey] || [];
-  const used = new Array(rows.length).fill(false);
-  const out = [];
-  for (const f of req) {
-    const name = REQ_LABEL(f);
-    const isPhoto = typeof f === "object" && f.photo;
-    const matched = rows.map((a, i) => ({ a, i })).filter(({ a, i }) => !used[i] && fieldMatch(a.name, name));
-    if (matched.length) { matched.forEach(({ i }) => (used[i] = true)); matched.forEach(({ a }) => out.push({ a, photo: isPhoto })); }
-    else out.push({ name, photo: isPhoto, missing: true });
-  }
-  rows.forEach((a, i) => { if (!used[i]) out.push({ a }); });
-  return out;
-}
+import { buildSectionRows, planSections } from "@shared/lib/sections.js";
 
 export default function App() {
   const [view, setView] = useState({ name: "search" });
@@ -250,22 +188,22 @@ function Detail({ id, onBack }) {
       <EquipmentProfile d={d} />
 
 
-      {SECTIONS.filter(([key]) => (REQUIRED_FIELDS[key] || []).length > 0 || groups[key]?.length).map(([key, label]) => {
-        const outRows = buildSectionRows(key, groups[key] || []);
+      {planSections(groups).map(({ key, label, rows }) => {
+        const outRows = buildSectionRows(key, rows);
         return (
         <section key={key} className="rec-group">
           <h2>{label}</h2>
           <table className="spec">
             <tbody>
               {outRows.map((r, i) => (
-                <tr key={r.a ? r.a.id : "m" + i} className={r.missing ? "missing" : ""}>
-                  <td className="k">{r.a ? r.a.name : r.name}</td>
+                <tr key={r.kind === "attr" ? r.a.id : "m" + i} className={r.kind === "missing" ? "missing" : ""}>
+                  <td className="k">{r.kind === "attr" ? r.a.name : r.name}</td>
                   <td className="v">
                     {r.photo
-                      ? (r.a && r.a.image_url
+                      ? (r.kind === "attr" && r.a.image_url
                           ? <a href={fileUrl(r.a.image_url)} target="_blank" rel="noreferrer"><img src={fileUrl(r.a.image_url)} alt="" className="attr-photo" /></a>
                           : <span className="muted">No photo</span>)
-                      : (r.a ? <>{r.a.value || "—"} {r.a.unit || ""}</> : <span className="muted">—</span>)}
+                      : (r.kind === "attr" ? <>{r.a.value || "—"} {r.a.unit || ""}</> : <span className="muted">—</span>)}
                   </td>
                 </tr>
               ))}
@@ -313,7 +251,7 @@ function Detail({ id, onBack }) {
 
       <section className="rec-group">
         <h2>AI Engineering Assistant</h2>
-        <AIAssistant entryId={id} />
+        <AIAssistant entryId={id} api={api} />
       </section>
     </div>
   );

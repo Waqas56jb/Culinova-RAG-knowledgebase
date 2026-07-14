@@ -35,22 +35,6 @@ async function loadVersionContext(versionId) {
 }
 
 /**
- * What did the MANUFACTURER say about this same parameter?
- * Many of our output parameters (Cable Size, Drain Size, Gas Connection Size) are ALSO printed on the
- * datasheet — that is exactly the comparison the client wants to see.
- */
-async function manufacturerValueFor(versionId, parameterId) {
-  const { data } = await supabase
-    .from("ceks_knowledge_attributes")
-    .select("id, name, value, unit, source_page, source_document, confidence, verified")
-    .eq("version_id", versionId)
-    .eq("parameter_id", parameterId)
-    .limit(1)
-    .maybeSingle();
-  return data || null;
-}
-
-/**
  * Run the engine over one knowledge version and persist the result.
  *
  * An engineer's existing DECISIONS are preserved: if they already accepted or modified a value under
@@ -75,13 +59,23 @@ async function generateForVersion(versionId, { actor = null, trigger = "extracti
     .eq("is_current", true);
   const prevByParam = new Map((existing || []).map((r) => [r.parameter_id, r]));
 
+  // Pre-fetch the manufacturer's own values for this version ONCE, into a map — it used to be one
+  // SELECT per recommendation (N+1). Only parameters an output also names are ever looked up.
+  const { data: manuAttrs } = await supabase
+    .from("ceks_knowledge_attributes")
+    .select("id, name, value, unit, source_page, source_document, confidence, verified, parameter_id")
+    .eq("version_id", versionId)
+    .not("parameter_id", "is", null);
+  const manuByParam = new Map();
+  for (const a of manuAttrs || []) if (!manuByParam.has(a.parameter_id)) manuByParam.set(a.parameter_id, a);
+
   const written = [];
   const seen = new Set();
 
   for (const rec of recommendations) {
     seen.add(rec.parameter_id);
     const prev = prevByParam.get(rec.parameter_id);
-    const manu = await manufacturerValueFor(versionId, rec.parameter_id);
+    const manu = manuByParam.get(rec.parameter_id) || null;
 
     const sameRuleVersion = prev && prev.rule_id === rec.rule_id && prev.rule_version === rec.rule_version;
     const sameValue = prev && String(prev.value_text ?? prev.value_num) === String(rec.value_text ?? rec.value_num);
@@ -117,7 +111,10 @@ async function generateForVersion(versionId, { actor = null, trigger = "extracti
     if (prev) {
       // supersede — never overwrite. The old one stays, frozen against its rule version.
       await supabase.from("ceks_recommendations").update({ is_current: false }).eq("id", prev.id);
-      const { data: ins } = await supabase.from("ceks_recommendations").insert(row).select().single();
+      const { data: ins, error: insErr } = await supabase.from("ceks_recommendations").insert(row).select().single();
+      // the partial-unique index (one current per version+parameter) makes a concurrent double-insert
+      // impossible; if that race is what failed us, the other generation's row stands — log, don't crash.
+      if (insErr) console.warn(`[recommendations] supersede insert for ${rec.parameter_key || rec.parameter_id} on ${versionId} failed: ${insErr.message}`);
       if (ins) {
         await supabase.from("ceks_recommendations").update({ superseded_by: ins.id }).eq("id", prev.id);
         await history(versionId, {
@@ -135,7 +132,8 @@ async function generateForVersion(versionId, { actor = null, trigger = "extracti
         written.push(ins);
       }
     } else {
-      const { data: ins } = await supabase.from("ceks_recommendations").insert(row).select().single();
+      const { data: ins, error: insErr } = await supabase.from("ceks_recommendations").insert(row).select().single();
+      if (insErr) console.warn(`[recommendations] insert for ${rec.parameter_key || rec.parameter_id} on ${versionId} failed: ${insErr.message}`);
       if (ins) {
         await history(versionId, {
           recommendation_id: ins.id,

@@ -5,6 +5,7 @@ const { getEntryDetail } = require("../utils/detail");
 const { uploadBuffer } = require("../services/storage");
 const { indexEntry } = require("../services/embeddings");
 const { updateEntryIdentity } = require("../utils/draft");
+const { setStatus, approveAndIndex } = require("../utils/workflow");
 const auth = require("../services/auth");
 
 const router = express.Router();
@@ -24,18 +25,29 @@ async function versionIdFor(entryId) {
   return entry && entry.current_version_id;
 }
 
-/** GET /api/review/drafts?status=draft|under_review|all */
+/** GET /api/review/drafts?status=draft|under_review|all&page=&limit= */
 router.get("/drafts", canRead, async (req, res) => {
   try {
     const status = req.query.status || "pending";
-    let q = supabase.from("ceks_knowledge_entries").select("*").order("created_at", { ascending: false });
+    const page = Math.max(1, parseInt(req.query.page || "1", 10));
+    const limit = Math.min(200, Math.max(1, parseInt(req.query.limit || "100", 10)));
+    const from = (page - 1) * limit;
+
+    // paginate + exact count — an unbounded select is silently capped at 1000 rows by PostgREST,
+    // which quietly hides drafts past that point from the reviewer.
+    let q = supabase
+      .from("ceks_knowledge_entries")
+      .select("*", { count: "exact" })
+      .order("created_at", { ascending: false })
+      .range(from, from + limit - 1);
     if (status === "pending") q = q.in("current_status", ["draft", "under_review"]);
     else if (status !== "all") q = q.eq("current_status", status);
-    const { data, error } = await q;
+    const { data, count, error } = await q;
     if (error) throw new Error(error.message);
-    res.json({ items: data || [] });
+    res.json({ items: data || [], total: count || 0, page, limit });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error("[review/drafts]", err.message);
+    res.status(500).json({ error: "Something went wrong." });
   }
 });
 
@@ -185,75 +197,41 @@ router.delete("/attributes/:id", canEdit, async (req, res) => {
   }
 });
 
-async function transition(entryId, toStatus, comment, actor) {
-  const { data: entry, error } = await supabase.from("ceks_knowledge_entries").select("*").eq("id", entryId).single();
-  if (error) throw new Error(error.message);
-  const patch = { current_status: toStatus, updated_at: new Date().toISOString() };
-  // The client requires an identity on every transition — this is the whole reason auth exists here.
-  if (toStatus === "approved") { patch.approved_at = new Date().toISOString(); patch.approved_by = actor?.id || null; }
-  if (toStatus === "under_review") patch.reviewed_by = actor?.id || null;
-  await supabase.from("ceks_knowledge_entries").update(patch).eq("id", entryId);
-  if (entry.current_version_id) {
-    await supabase.from("ceks_knowledge_versions").update({ status: toStatus }).eq("id", entry.current_version_id);
-    await supabase.from("ceks_knowledge_status_history").insert({
-      version_id: entry.current_version_id,
-      from_status: entry.current_status,
-      to_status: toStatus,
-      changed_by: actor?.id || null,
-      comment: comment || null,
-    });
-  }
-  return entry;
-}
-
 /** POST /api/entries/:id/submit */
 router.post("/entries/:id/submit", canSubmit, async (req, res) => {
   try {
-    await transition(req.params.id, "under_review", req.body.comment, req.user);
+    await setStatus(req.params.id, "under_review", req.body.comment, req.user);
     res.json({ ok: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error("[review/submit]", err.message);
+    res.status(err.status || 500).json({ error: err.status ? err.message : "Something went wrong." });
   }
 });
 
 /** POST /api/entries/:id/reject  { comment } */
 router.post("/entries/:id/reject", canApprove, async (req, res) => {
   try {
-    await transition(req.params.id, "rejected", req.body.comment, req.user);
+    await setStatus(req.params.id, "rejected", req.body.comment, req.user);
     res.json({ ok: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error("[review/reject]", err.message);
+    res.status(err.status || 500).json({ error: err.status ? err.message : "Something went wrong." });
   }
 });
 
-/** POST /api/entries/:id/approve — approve + index into Chroma (best-effort) */
+/**
+ * POST /api/entries/:id/approve — approve (+ index for search). Approval is BLOCKED by the shared
+ * workflow if any CULINOVA recommendation is still unresolved (the client's rule); the blockers are
+ * returned so the reviewer knows exactly what to resolve first.
+ */
 router.post("/entries/:id/approve", canApprove, async (req, res) => {
   try {
-    await transition(req.params.id, "approved", req.body.comment, req.user);
-    const detail = await getEntryDetail(req.params.id);
-
-    // best-effort semantic index
-    const attrText = (detail.attributes || [])
-      .map((a) => `${a.name}: ${a.value ?? ""}${a.unit ? " " + a.unit : ""}`)
-      .join("\n");
-    const noteText = (detail.notes || []).map((n) => n.content).join("\n");
-    indexEntry({
-      id: detail.entry.id,
-      title: detail.entry.title,
-      text: `${attrText}\n${noteText}`,
-      metadata: {
-        entry_id: detail.entry.id,
-        title: detail.entry.title,
-        model_number: detail.model?.model_number || "",
-        brand: detail.model?.brand || "",
-        category: detail.model?.category || "",
-        equipment_type: detail.model?.equipment_type || "",
-      },
-    }).catch(() => {});
-
+    await approveAndIndex(req.params.id, req.body.comment, req.user);
     res.json({ ok: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    if (err.status === 409) return res.status(409).json({ error: err.message, blockers: err.blockers || [] });
+    console.error("[review/approve]", err.message);
+    res.status(err.status || 500).json({ error: err.status ? err.message : "Something went wrong." });
   }
 });
 

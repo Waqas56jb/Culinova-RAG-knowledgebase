@@ -4,6 +4,7 @@ const num = (v, d) => {
   const n = parseInt(v, 10);
   return Number.isFinite(n) ? n : d;
 };
+const bool = (v, d = false) => (v === undefined ? d : /^(1|true|yes|on)$/i.test(String(v)));
 
 const env = {
   port: num(process.env.PORT, 4400),
@@ -26,6 +27,14 @@ const env = {
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean),
+  // Opt-in: allow any *.vercel.app preview origin. Off by default — prefer explicit CORS_ORIGINS.
+  corsAllowVercelPreviews: bool(process.env.CORS_ALLOW_VERCEL, false),
+
+  // ── RATE LIMITS (per IP; a speed bump, not a distributed limiter) ───────────
+  rateLimitPerMin: num(process.env.RATE_LIMIT_PER_MIN, 300),
+  rateLimitIngestPer15Min: num(process.env.RATE_LIMIT_INGEST_PER_15MIN, 60),
+  rateLimitAiPer5Min: num(process.env.RATE_LIMIT_AI_PER_5MIN, 40),
+  rateLimitAuthPer15Min: num(process.env.RATE_LIMIT_AUTH_PER_15MIN, 50),
 
   // ── AUTH ───────────────────────────────────────────────────────────────────
   // There is deliberately NO default. A guessable signing key is the same as having no
@@ -34,6 +43,12 @@ const env = {
   jwtSecret: process.env.JWT_SECRET,
   authAccessTtl: process.env.AUTH_ACCESS_TTL || "12h",
   authRefreshDays: num(process.env.AUTH_REFRESH_DAYS, 30),
+
+  // ── STORAGE ──────────────────────────────────────────────────────────────
+  storageBucket: process.env.STORAGE_BUCKET || "ceks-files",
+  // false → public bucket (portal reads datasheets by direct URL). true → private bucket + signed URLs.
+  storagePrivate: bool(process.env.STORAGE_PRIVATE, false),
+  storageSignedTtl: num(process.env.STORAGE_SIGNED_TTL, 3600),
 
   // ── LIMITS (were hardcoded across the codebase) ─────────────────────────────
   uploadMaxFileMb: num(process.env.UPLOAD_MAX_FILE_MB, 50),

@@ -20,7 +20,9 @@
  * author immediately, so a bad formula can never reach an approved rule.
  */
 
-const FUNCTIONS = {
+// Null-prototype: a formula that names an inherited property ("constructor", "hasOwnProperty")
+// must be an UNKNOWN function, not a silent hit on Object.prototype that only fails at run time.
+const FUNCTIONS = Object.assign(Object.create(null), {
   sqrt: (x) => Math.sqrt(x),
   min: (...a) => Math.min(...a),
   max: (...a) => Math.max(...a),
@@ -32,7 +34,18 @@ const FUNCTIONS = {
   log: (x) => Math.log10(x),
   ln: (x) => Math.log(x),
   exp: (x) => Math.exp(x),
-};
+});
+const hasFn = (name) => Object.prototype.hasOwnProperty.call(FUNCTIONS, name);
+
+// Every arithmetic result must be a finite number. An engineering value of Infinity or NaN
+// (overflow, 1e308*1e308, a bad input) must fail LOUDLY, never persist as a recommendation.
+function finite(v, opLabel) {
+  if (!Number.isFinite(v)) throw new ExprError(`the result of ${opLabel} is not a finite number`);
+  return v;
+}
+
+// The keywords the language reserves. Used so `and`/`or`/`not` are operators, never identifiers.
+const isKeyword = (tok, kw) => tok.t === "ident" && tok.v.toLowerCase() === kw;
 
 // ── tokenizer ────────────────────────────────────────────────────────────────
 function tokenize(src) {
@@ -117,19 +130,28 @@ function parse(src) {
   }
   function parseOr() {
     let left = parseAnd();
-    while (peek().t === "op" && peek().v === "||") { next(); left = { k: "bin", op: "||", l: left, r: parseAnd() }; }
+    // `||` and the `or` keyword are the same operator
+    while ((peek().t === "op" && peek().v === "||") || isKeyword(peek(), "or")) { next(); left = { k: "bin", op: "||", l: left, r: parseAnd() }; }
     return left;
   }
   function parseAnd() {
     let left = parseCmp();
-    while (peek().t === "op" && peek().v === "&&") { next(); left = { k: "bin", op: "&&", l: left, r: parseCmp() }; }
+    while ((peek().t === "op" && peek().v === "&&") || isKeyword(peek(), "and")) { next(); left = { k: "bin", op: "&&", l: left, r: parseCmp() }; }
     return left;
   }
+  const CMP_OPS = ["<", "<=", ">", ">=", "==", "!="];
   function parseCmp() {
-    let left = parseAdd();
-    while (peek().t === "op" && ["<", "<=", ">", ">=", "==", "!="].includes(peek().v)) {
+    const left = parseAdd();
+    if (peek().t === "op" && CMP_OPS.includes(peek().v)) {
       const op = next().v;
-      left = { k: "bin", op, l: left, r: parseAdd() };
+      const node = { k: "bin", op, l: left, r: parseAdd() };
+      // REJECT chained comparisons. `16 <= x <= 20` is left-associative in this grammar, so it would
+      // evaluate as `(16 <= x) <= 20` — a 0/1 compared to 20 — which is ALWAYS true, silently making a
+      // range check match every value. An author almost always means a conjunction, so demand it:
+      if (peek().t === "op" && CMP_OPS.includes(peek().v)) {
+        throw new ExprError('Chained comparison is not allowed. Write it with "&&", e.g. "16 <= x && x <= 20"', peek().i);
+      }
+      return node;
     }
     return left;
   }
@@ -168,7 +190,10 @@ function parse(src) {
       const lower = t.v.toLowerCase();
       if (lower === "true") return { k: "num", v: 1 };
       if (lower === "false") return { k: "num", v: 0 };
-      if (lower === "and") throw new ExprError('Use "&&" or write and between two values', t.i);
+      // and/or/not are operators; reaching them here means they were used where a value was expected
+      if (lower === "and" || lower === "or" || lower === "not") {
+        throw new ExprError(`"${t.v}" is an operator and needs a value on each side`, t.i);
+      }
       // function call?
       if (peek().t === "op" && peek().v === "(") {
         next();
@@ -178,7 +203,7 @@ function parse(src) {
           while (peek().t === "op" && peek().v === ",") { next(); args.push(parseTernary()); }
         }
         expect(")");
-        if (!FUNCTIONS[lower]) throw new ExprError(`Unknown function "${t.v}". Available: ${Object.keys(FUNCTIONS).join(", ")}`, t.i);
+        if (!hasFn(lower)) throw new ExprError(`Unknown function "${t.v}". Available: ${Object.keys(FUNCTIONS).join(", ")}`, t.i);
         return { k: "call", fn: lower, args };
       }
       return { k: "var", name: t.v };
@@ -229,16 +254,16 @@ function evalAst(node, scope, used) {
       const l = evalAst(node.l, scope, used);
       const r = evalAst(node.r, scope, used);
       switch (node.op) {
-        case "+": return l + r;
-        case "-": return l - r;
-        case "*": return l * r;
+        case "+": return finite(l + r, '"+"');
+        case "-": return finite(l - r, '"-"');
+        case "*": return finite(l * r, '"*"');
         case "/":
           if (r === 0) throw new ExprError("Division by zero");
-          return l / r;
+          return finite(l / r, '"/"');
         case "%":
           if (r === 0) throw new ExprError("Division by zero");
-          return l % r;
-        case "^": return l ** r;
+          return finite(l % r, '"%"');
+        case "^": return finite(l ** r, '"^"');
         case "<": return l < r ? 1 : 0;
         case "<=": return l <= r ? 1 : 0;
         case ">": return l > r ? 1 : 0;
@@ -253,6 +278,7 @@ function evalAst(node, scope, used) {
     case "cond":
       return evalAst(node.cond, scope, used) ? evalAst(node.a, scope, used) : evalAst(node.b, scope, used);
     case "call": {
+      if (!hasFn(node.fn)) throw new ExprError(`Unknown function "${node.fn}"`);
       const args = node.args.map((a) => evalAst(a, scope, used));
       const out = FUNCTIONS[node.fn](...args);
       if (!Number.isFinite(out)) throw new ExprError(`${node.fn}() produced a non-finite result`);

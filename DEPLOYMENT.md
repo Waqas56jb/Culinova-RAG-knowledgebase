@@ -11,14 +11,21 @@ The API does long-running AI PDF extraction (~20–40s per file). Two options:
 ### Option A — Render  ✅ recommended (solid, no timeout)
 A persistent Node server. The extraction never hits a serverless time limit.
 
-1. Render Dashboard → **New → Blueprint** → select this repo (uses `render.yaml`).
+1. Render Dashboard → **New → Blueprint** → select this repo (uses `render.yaml`, which runs
+   `npm run migrate` before each deploy and generates `JWT_SECRET` automatically).
    (Or **New → Web Service**, Root Directory `server`, Build `npm install`, Start `npm start`.)
 2. Add environment variables:
+   - `JWT_SECRET`  ← **required.** A long random string (`openssl rand -base64 48`). Without it the
+     server rejects every sign-in and refuses to boot in production. (The blueprint auto-generates it;
+     set it manually if you create the service by hand.)
+   - `DATABASE_URL`  (Postgres connection string — used by the migration step)
    - `SUPABASE_URL`
    - `SUPABASE_SERVICE_ROLE_KEY`  (the `sb_secret_...` key)
    - `OPENAI_API_KEY`
+   - `CORS_ORIGINS`  (the admin + client origins, comma-separated)
+   - `NODE_ENV=production`
 3. Deploy. You get a URL like `https://culinova-eos-server.onrender.com`.
-4. Health check: open `/api/health` → should return `{ ok: true }`.
+4. Health check: open `/api/health/ready` → returns `{ status: "ready" }` once the DB is reachable.
 
 ### Option B — Vercel (serverless)
 Works, but each request must finish within the plan's function limit.
@@ -26,7 +33,10 @@ Works, but each request must finish within the plan's function limit.
 that allows ≥60s functions; otherwise use Render.
 
 - Vercel project **Root Directory = `server`** (config is in `server/vercel.json`).
-- Add the same 3 environment variables (Project → Settings → Environment Variables).
+- Add the SAME environment variables as Render above — **including `JWT_SECRET`** (Project →
+  Settings → Environment Variables). Vercel does not auto-generate it; paste a strong random value.
+- Run the migrations once from your machine against the production DB: `DATABASE_URL=… npm run migrate`
+  (serverless has no pre-deploy hook).
 - Redeploy.
 
 > The crash you saw (`FUNCTION_INVOCATION_FAILED`) was because an Express

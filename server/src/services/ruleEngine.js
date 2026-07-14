@@ -20,6 +20,27 @@ const expr = require("./expression");
 
 const n0 = (v) => (v == null ? null : Number(v));
 
+// A DB-authored regex runs against attacker-influenceable attribute text. We cannot make an arbitrary
+// pattern linear-time without a RE2 engine, but we CAN bound the work: cap the tested string length
+// so catastrophic backtracking has little to chew on. Patterns are also validated when authored.
+const REGEX_INPUT_CAP = 512;
+function safeRegexTest(pattern, input) {
+  try {
+    return new RegExp(pattern, "i").test(String(input).slice(0, REGEX_INPUT_CAP));
+  } catch {
+    return null; // invalid pattern → caller decides; never throws into evaluation
+  }
+}
+
+// The effective confidence of an input. An UNKNOWN confidence is NOT 1.0 — a value we cannot vouch
+// for must not read as fully trusted. An ASSUMED value (unit assumed, bound recorded) is capped low.
+function effectiveConfidence(source, unknownDefault) {
+  let c = source && source.confidence != null ? Number(source.confidence) : unknownDefault;
+  if (!Number.isFinite(c)) c = unknownDefault;
+  if (source && source.assumed) c = Math.min(c, unknownDefault);
+  return c;
+}
+
 // ── CONDITION EVALUATION ─────────────────────────────────────────────────────
 /**
  * Does one condition hold for the equipment?
@@ -47,6 +68,12 @@ function evalCondition(dict, cond, scope) {
       reason: `${param.label} is missing`,
       param,
     };
+  }
+
+  // a fact with conflicting values on the same datasheet is UNUSABLE until an engineer chooses; a
+  // rule referencing it simply does not fire (the ambiguity itself is reported once, globally).
+  if (fact.ambiguous) {
+    return { matched: false, multiValue: true, reason: `${param.label} has conflicting values on this datasheet`, param, using: fact };
   }
 
   // ── numeric comparison ────────────────────────────────────────────────────
@@ -145,12 +172,11 @@ function evalCondition(dict, cond, scope) {
       return { matched: !list.includes(lowerFact), reason: `${param.label} "${factVal}" is excluded`, param, using: fact };
     case "contains":
       return { matched: lowerFact.includes(target.toLowerCase()), reason: `${param.label} does not contain "${target}"`, param, using: fact };
-    case "matches":
-      try {
-        return { matched: new RegExp(target, "i").test(factVal), reason: `${param.label} does not match /${target}/`, param, using: fact };
-      } catch {
-        return { matched: false, reason: `the rule's pattern "${target}" is not a valid expression`, param, using: fact };
-      }
+    case "matches": {
+      const hit = safeRegexTest(target, factVal);
+      if (hit === null) return { matched: false, reason: `the rule's pattern "${target}" is not a valid expression`, param, using: fact };
+      return { matched: hit, reason: `${param.label} does not match /${target}/`, param, using: fact };
+    }
     default:
       return { matched: false, reason: `operator "${cond.operator}" is not valid for ${param.data_type}`, param, using: fact };
   }
@@ -194,8 +220,23 @@ async function loadActiveRules({ disciplineId = null, ruleType = null } = {}) {
  */
 async function applyDerivations(dict, scope, constants) {
   const rules = await loadActiveRules({ ruleType: "derivation" });
+  const unknownConf = dictSvc.settingNum(dict, "unknown_confidence_default", 0.5);
   const derived = [];
   const failures = [];
+  const conflicts = [];
+
+  // The variables a formula may read: constants + every UNAMBIGUOUS scope fact. An ambiguous fact is
+  // deliberately withheld so a derivation can never silently compute off a guessed value.
+  const buildVars = () => {
+    const vars = { ...constants };
+    for (const [k, f] of Object.entries(scope)) {
+      if (f.ambiguous) continue;
+      if (f.num != null) vars[k] = f.num;
+      else if (f.min != null && f.max != null) vars[k] = (Number(f.min) + Number(f.max)) / 2;
+    }
+    return vars;
+  };
+  const same = (a, b) => Number(a).toFixed(6) === Number(b).toFixed(6);
 
   // a derivation may depend on another derivation — iterate until nothing new appears
   let progress = true;
@@ -204,75 +245,90 @@ async function applyDerivations(dict, scope, constants) {
     progress = false;
     pass++;
 
+    // 1) gather EVERY derivation candidate that fires this pass, grouped by the parameter it produces
+    const candidatesByParam = new Map();
     for (const rule of rules) {
+      const conds = rule.ceks_rule_conditions || [];
+      const results = conds.map((c) => evalCondition(dict, c, scope));
+      if (!results.every((r) => r.matched)) continue;
+
       for (const out of rule.ceks_rule_outputs || []) {
         const p = dict.paramById.get(out.parameter_id);
-        if (!p || scope[p.key]) continue;            // already known (manufacturer wins over derived)
-        if (!out.expression) continue;
+        if (!p || scope[p.key] || !out.expression) continue; // manufacturer/derived value already wins
 
-        // its conditions must hold too (e.g. "only for 3-Phase")
-        const conds = rule.ceks_rule_conditions || [];
-        const results = conds.map((c) => evalCondition(dict, c, scope));
-        if (!results.every((r) => r.matched)) continue;
-
-        const vars = { ...constants };
-        for (const [k, f] of Object.entries(scope)) {
-          if (f.num != null) vars[k] = f.num;
-          else if (f.min != null && f.max != null) vars[k] = (Number(f.min) + Number(f.max)) / 2;
-        }
-
+        const vars = buildVars();
         const res = expr.evaluate(out.expression, vars);
         if (!res.ok) {
           failures.push({
-            parameter: p.key,
-            label: p.label,
-            rule_id: rule.id,
-            rule_code: rule.code,
-            expression: out.expression,
-            error: res.error,
-            missing: res.missing,
+            parameter: p.key, label: p.label, rule_id: rule.id, rule_code: rule.code,
+            expression: out.expression, error: res.error, missing: res.missing,
           });
           continue;
         }
-
-        const inputs = res.used.map((k) => {
-          const f = scope[k];
-          return f
-            ? { key: k, label: f.label, value: f.num ?? f.value, unit: f.unit, page: f.source?.page, confidence: f.source?.confidence }
-            : { key: k, value: vars[k], constant: true };
-        });
-
-        scope[p.key] = {
-          parameter_id: p.id,
-          key: p.key,
-          label: p.label,
-          data_type: p.data_type,
-          value: String(res.value),
-          num: res.value,
-          min: null,
-          max: null,
-          unit: out.unit || p.canonical_unit,
-          source: {
-            origin: "derived",
-            rule_id: rule.id,
-            rule_code: rule.code,
-            rule_version: rule.version,
-            expression: out.expression,
-            inputs,
-            // a derived value is only as trustworthy as its weakest input
-            confidence: Math.min(
-              1,
-              ...inputs.filter((i) => i.confidence != null).map((i) => Number(i.confidence)).concat([1])
-            ),
-          },
-        };
-        derived.push({ parameter: p.key, label: p.label, value: res.value, unit: out.unit || p.canonical_unit, rule: rule.code });
-        progress = true;
+        if (!candidatesByParam.has(p.key)) candidatesByParam.set(p.key, []);
+        candidatesByParam.get(p.key).push({ rule, out, p, res, vars });
       }
+    }
+
+    // 2) resolve each parameter: highest priority wins; equal priority + different answer = CONFLICT
+    for (const [key, cands] of candidatesByParam) {
+      if (scope[key]) continue;
+      cands.sort((a, b) => b.rule.priority - a.rule.priority);
+      const top = cands[0];
+      const disagreeing = cands.filter(
+        (c) => c.rule.priority === top.rule.priority && c.rule.id !== top.rule.id && !same(c.res.value, top.res.value)
+      );
+      if (disagreeing.length) {
+        // two derivation rules of equal priority compute DIFFERENT values → EOS does not choose.
+        conflicts.push({
+          parameter: key,
+          label: top.p.label,
+          candidates: [top, ...disagreeing].map((c) => ({
+            rule_id: c.rule.id, rule_code: c.rule.code, rule_version: c.rule.version,
+            priority: c.rule.priority, value: c.res.value, unit: c.out.unit || c.p.canonical_unit,
+          })),
+        });
+        continue; // leave it underived — the engineer resolves it
+      }
+
+      const { rule, out, p, res } = top;
+      const inputs = res.used.map((k) => {
+        const f = scope[k];
+        return f
+          ? { key: k, label: f.label, value: f.num ?? f.value, unit: f.unit, page: f.source?.page, confidence: effectiveConfidence(f.source, unknownConf), assumed: !!f.source?.assumed }
+          : { key: k, value: top.vars[k], constant: true };
+      });
+      const inputConfs = inputs.filter((i) => !i.constant).map((i) => i.confidence);
+
+      scope[p.key] = {
+        parameter_id: p.id,
+        key: p.key,
+        label: p.label,
+        data_type: p.data_type,
+        value: String(res.value),
+        num: res.value,
+        min: null,
+        max: null,
+        unit: out.unit || p.canonical_unit,
+        source: {
+          origin: "derived",
+          rule_id: rule.id,
+          rule_code: rule.code,
+          rule_version: rule.version,
+          expression: out.expression,
+          inputs,
+          // a derived value is only as trustworthy as its weakest input (unknown inputs count as low)
+          confidence: inputConfs.length ? Math.min(...inputConfs) : unknownConf,
+          verified: false,
+          assumed: inputs.some((i) => i.assumed),
+        },
+      };
+      derived.push({ parameter: p.key, label: p.label, value: res.value, unit: out.unit || p.canonical_unit, rule: rule.code });
+      progress = true;
     }
   }
 
-  return { derived, failures };
+  return { derived, failures, conflicts };
 }
 
 // ── THE MAIN PASS ────────────────────────────────────────────────────────────
@@ -282,11 +338,37 @@ async function applyDerivations(dict, scope, constants) {
  */
 async function evaluate({ scope, constants, dict }) {
   const threshold = dictSvc.settingNum(dict, "confidence_threshold", 0.8);
+  const unknownConf = dictSvc.settingNum(dict, "unknown_confidence_default", 0.5);
   const recommendations = [];
   const validations = [];
 
+  // 0) surface any input the datasheet stated more than one way — ONCE, before any rule runs. The
+  //    engine will not pick between "230 V" and "400 V"; an engineer must select the correct value.
+  for (const [key, fact] of Object.entries(scope)) {
+    if (!fact.ambiguous) continue;
+    validations.push({
+      code: "ambiguous_input",
+      severity: "error",
+      parameter_key: key,
+      message: `${fact.label}: conflicting values found on this datasheet.`,
+      reason: `Found ${fact.candidates.length} different values — ${fact.candidates.join(", ")}. EOS will not choose between them; an engineer must select the correct one.`,
+      required_input: [key],
+      details: { candidates: fact.candidates },
+    });
+  }
+
   // 1) derive whatever we can (Current from Power/Voltage/Phase, etc.)
-  const { derived, failures } = await applyDerivations(dict, scope, constants);
+  const { derived, failures, conflicts } = await applyDerivations(dict, scope, constants);
+  for (const c of conflicts) {
+    validations.push({
+      code: "conflict",
+      severity: "error",
+      parameter_key: c.parameter,
+      message: `${c.label}: two derivation rules of equal priority disagree.`,
+      reason: `${c.candidates.map((x) => `${x.rule_code} → ${x.value}${x.unit ? " " + x.unit : ""}`).join("; ")}. EOS will not choose — an engineer must decide.`,
+      details: { candidates: c.candidates },
+    });
+  }
   for (const f of failures) {
     validations.push({
       code: "missing_input",
@@ -371,11 +453,13 @@ async function evaluate({ scope, constants, dict }) {
         origin: r.using.source?.origin,
         document: r.using.source?.document,
         page: r.using.source?.page,
-        confidence: r.using.source?.confidence,
+        // an UNKNOWN or ASSUMED input confidence is treated as LOW, never as fully trusted
+        confidence: effectiveConfidence(r.using.source, unknownConf),
+        assumed: !!r.using.source?.assumed,
         rule_code: r.using.source?.rule_code,   // set when the input was itself derived
       }));
 
-    const confidences = inputsUsed.map((i) => (i.confidence == null ? 1 : Number(i.confidence)));
+    const confidences = inputsUsed.map((i) => Number(i.confidence));
     const confidence = confidences.length ? Math.min(...confidences) : null;
 
     for (const out of rule.ceks_rule_outputs || []) {

@@ -27,6 +27,12 @@ const S = (s) => console.log(`\n── ${s} ──`);
 
 const cleanup = { rules: [], constants: [], versionId: null, entryId: null };
 
+// This verifier WRITES to the database it points at. It is fully self-cleaning and only ever creates
+// its own synthetic, ZZ-VERIFY-tagged records — it never touches a real entry — but writing to a
+// production database is still a deliberate act. Require an explicit opt-in so it can never run by
+// accident as part of, say, a CI step pointed at prod.
+const FORCE = process.argv.includes("--force") || process.env.EOS_ALLOW_ENGINE_TEST === "1";
+
 /** Remove anything a previous (possibly crashed) run left behind, so the script is re-runnable. */
 async function purgeLeftovers() {
   const { data: old } = await supabase.from("ceks_rules").select("id").like("code", "ZZ-%");
@@ -45,6 +51,13 @@ async function purgeLeftovers() {
 
 (async () => {
   console.log("\n######## ENGINEERING RULES ENGINE — LIVE VERIFICATION ########");
+  if (!FORCE) {
+    console.error(
+      "\nThis writes synthetic ZZ-VERIFY data to the configured database and then removes it.\n" +
+      "Re-run with --force (or EOS_ALLOW_ENGINE_TEST=1) to confirm you are pointing at a safe database.\n"
+    );
+    process.exit(2);
+  }
   await purgeLeftovers();
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -130,15 +143,21 @@ async function purgeLeftovers() {
   ok(true, "recommendation rule ZZ-E-006 created — conditions + outputs, all data");
 
   // ─────────────────────────────────────────────────────────────────────────
-  S("A REAL piece of equipment from the live knowledge base");
-  const { data: entry } = await supabase
+  S("A SYNTHETIC piece of equipment (isolated — a real entry is never touched)");
+  // Create our own throwaway entry + version. The engine normalises and writes recommendations for a
+  // whole version, so borrowing a real approved entry would leave residue on production rows. This
+  // record is tagged ZZ-VERIFY and fully deleted in CLEANUP.
+  const { data: tEntry } = await supabase
     .from("ceks_knowledge_entries")
-    .select("*")
-    .eq("current_status", "approved")
-    .not("current_version_id", "is", null)
-    .limit(1)
-    .maybeSingle();
-  ok(!!entry, `using "${entry?.title}" (${entry?.brand || "?"})`);
+    .insert({ title: "ZZ-VERIFY Test Equipment", code: "ZZ-VERIFY", brand: "ZZ-VERIFY", current_status: "under_review", origin: "manual" })
+    .select().single();
+  const { data: tVersion } = await supabase
+    .from("ceks_knowledge_versions")
+    .insert({ knowledge_entry_id: tEntry.id, version_number: 1, status: "under_review" })
+    .select().single();
+  await supabase.from("ceks_knowledge_entries").update({ current_version_id: tVersion.id }).eq("id", tEntry.id);
+  const entry = { ...tEntry, current_version_id: tVersion.id };
+  ok(!!tVersion, `created synthetic entry "${entry.title}" (nothing real is modified)`);
   cleanup.entryId = entry.id;
   cleanup.versionId = entry.current_version_id;
 
@@ -251,7 +270,10 @@ async function purgeLeftovers() {
     await supabase.from("ceks_rules").delete().eq("id", id);
   }
   await supabase.from("ceks_rule_constants").delete().in("id", cleanup.constants);
-  console.log("  every test rule, constant, attribute and recommendation removed");
+  // remove the synthetic entry + version themselves (cascades any remaining children)
+  if (cleanup.versionId) await supabase.from("ceks_knowledge_versions").delete().eq("id", cleanup.versionId);
+  if (cleanup.entryId) await supabase.from("ceks_knowledge_entries").delete().eq("id", cleanup.entryId);
+  console.log("  every test rule, constant, attribute, recommendation AND the synthetic entry removed");
 
   console.log(`\n######## RESULT: ${pass} passed, ${fail} failed ########\n`);
   process.exit(fail ? 1 : 0);

@@ -1,3 +1,5 @@
+import { j } from "@shared/lib/http.js";
+
 const API = import.meta.env.VITE_API_BASE || "http://localhost:4400";
 
 // ── auth/session ──────────────────────────────────────────────────────────────
@@ -17,17 +19,6 @@ export const session = {
   get signedIn() { return !!store.access; },
   can: (perm) => !!(store.user && (store.user.permissions || []).includes(perm)),
 };
-
-async function j(res) {
-  if (!res.ok) {
-    let msg = res.statusText;
-    try { msg = (await res.json()).error || msg; } catch {}
-    const e = new Error(msg);
-    e.status = res.status;
-    throw e;
-  }
-  return res.json();
-}
 
 const authHeaders = () => (store.access ? { Authorization: `Bearer ${store.access}` } : {});
 

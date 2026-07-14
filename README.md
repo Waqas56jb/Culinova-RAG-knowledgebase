@@ -25,19 +25,31 @@ All three produce a **Draft Knowledge Entry** that follows Draft → Under Revie
 
 ### 1. Database — Supabase
 1. Create a Supabase project.
-2. Open **SQL Editor**, paste **`server/db/schema.sql`**, and Run. (Creates all tables + seed data.)
-3. Copy the Project URL and the **service_role** key (Settings → API).
+2. Copy the Project URL, the **service_role** key (Settings → API), and the database
+   **connection string** (Settings → Database → session pooler).
+3. Apply the schema with the **migration runner** — never by pasting `schema.sql`:
+   ```bash
+   cd server
+   cp .env.example .env      # fill in DATABASE_URL, SUPABASE_*, OPENAI_API_KEY, JWT_SECRET
+   npm install
+   npm run migrate           # bootstraps an empty DB, then applies additive migrations in order
+   ```
+   `npm run migrate` is safe and idempotent: on a populated database it applies only the additive
+   migrations in `db/migrations/` and **refuses** to run the destructive `schema.sql` bootstrap
+   (which drops every table). Re-run it any time; it applies each migration exactly once.
 
 ### 2. Server
 ```bash
 cd server
-cp .env.example .env      # then fill in the values below
-npm install
 npm start
 ```
-`.env` values:
+`.env` values (see `.env.example` for the full list):
+- `DATABASE_URL` — Postgres connection string (used by `npm run migrate`)
 - `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` — from step 1
-- `OPENAI_API_KEY` — your OpenAI key (used for extraction + embeddings)
+- `JWT_SECRET` — **required**; a long random string. Without it every sign-in is rejected and the
+  server refuses to boot in production. Generate one: `openssl rand -base64 48`
+- `OPENAI_API_KEY` — your OpenAI key (used for extraction + embeddings + assistant)
+- `CORS_ORIGINS` — the admin + client origins
 - `CHROMA_URL` — optional; only needed for semantic search
 
 Server runs on **http://localhost:4400** (health: `/api/health`).
@@ -52,9 +64,9 @@ chroma run --path ./chroma-data --port 8000      # serves http://localhost:8000 
 The API connects automatically. If Chroma is down, the portal falls back to text search — nothing breaks.
 
 Entries are indexed into Chroma **when approved**. If Chroma was offline when some entries were
-approved, index them all at once:
+approved, index them all at once (the API now requires a signed-in reviewer — pass a bearer token):
 ```bash
-curl -X POST http://localhost:4400/api/reindex
+curl -X POST http://localhost:4400/api/reindex -H "Authorization: Bearer <access-token>"
 ```
 
 ### 4. Admin panel

@@ -1,13 +1,6 @@
-const API = import.meta.env.VITE_API_BASE || "http://localhost:4400";
+import { j } from "@shared/lib/http.js";
 
-async function j(res) {
-  if (!res.ok) {
-    let msg = res.statusText;
-    try { msg = (await res.json()).error || msg; } catch {}
-    throw new Error(msg);
-  }
-  return res.json();
-}
+const API = import.meta.env.VITE_API_BASE || "http://localhost:4400";
 
 export const api = {
   base: API,

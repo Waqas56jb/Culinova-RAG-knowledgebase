@@ -34,9 +34,14 @@ const CONFIRMED = argv.includes("--i-understand-this-deletes-everything");
   }
   const client = new Client({ connectionString: url, ssl: { rejectUnauthorized: false } });
 
+  // Only ONE migrator may run at a time. Under concurrent deploys the others block here, then find
+  // every migration already applied and do nothing — instead of racing to run the same SQL twice.
+  const MIGRATE_LOCK_KEY = 778201;
+
   try {
     console.log("Connecting to database…");
     await client.connect();
+    await client.query("select pg_advisory_lock($1)", [MIGRATE_LOCK_KEY]);
 
     // how much real data is in here?
     let entries = 0;
@@ -108,10 +113,12 @@ const CONFIRMED = argv.includes("--i-understand-this-deletes-everything");
       "select table_name from information_schema.tables where table_schema='public' and table_name like 'ceks_%' order by table_name"
     );
     console.log(`\n${r.rows.length} ceks_ tables in public.\n`);
+    try { await client.query("select pg_advisory_unlock($1)", [MIGRATE_LOCK_KEY]); } catch {}
     await client.end();
     process.exit(0);
   } catch (e) {
     console.error("\n✖ MIGRATION FAILED:", e.message);
+    // the advisory lock is session-scoped — disconnecting releases it, so a failure never wedges it
     try { await client.end(); } catch {}
     process.exit(1);
   }

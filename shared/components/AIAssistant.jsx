@@ -1,5 +1,4 @@
 import React, { useState } from "react";
-import { api } from "../api.js";
 import Markdown from "./Markdown.jsx";
 
 const SUGGESTIONS = [
@@ -9,7 +8,9 @@ const SUGGESTIONS = [
   "Summarize the electrical connection.",
 ];
 
-export default function AIAssistant({ entryId }) {
+// `api` is injected by each app so this single component works against either the
+// admin or the public-portal api client (both expose aiSummary/aiNotes/ask).
+export default function AIAssistant({ entryId, api }) {
   const [q, setQ] = useState("");
   const [answer, setAnswer] = useState("");
   const [busy, setBusy] = useState(false);

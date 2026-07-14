@@ -1,6 +1,7 @@
 const express = require("express");
 const { supabase } = require("../config/supabase");
 const { approveAndIndex, setStatus } = require("../utils/workflow");
+const { sanitizeSearch } = require("../utils/pgrst");
 const auth = require("../services/auth");
 
 const router = express.Router();
@@ -30,7 +31,10 @@ router.get("/entries", canRead, async (req, res) => {
     if (equipment_type) q = q.eq("equipment_type", equipment_type);
     if (power_type) q = q.eq("power_type", power_type);
     if (origin) q = q.eq("origin", origin);
-    if (search) q = q.or(`title.ilike.%${search}%,code.ilike.%${search}%,model_number.ilike.%${search}%`);
+    if (search) {
+      const s = sanitizeSearch(search);
+      if (s) q = q.or(`title.ilike.%${s}%,code.ilike.%${s}%,model_number.ilike.%${s}%`);
+    }
     q = q.order(sort, { ascending: order }).range((page - 1) * limit, (page - 1) * limit + limit - 1);
 
     const { data, count, error } = await q;
@@ -48,67 +52,76 @@ router.get("/entries", canRead, async (req, res) => {
  */
 router.get("/filters", canRead, async (req, res) => {
   try {
+    // Dependent facets computed in the database (DISTINCT ... WHERE upstream filters), NOT by pulling
+    // the whole table into Node — which PostgREST silently caps at 1000 rows, making facets wrong.
     const { category, brand, equipment_type } = req.query;
-    const { data } = await supabase.from("ceks_knowledge_entries").select("category,brand,equipment_type,power_type");
-    const rows = data || [];
-    const uniq = (arr, k) => [...new Set(arr.map((x) => x[k]).filter(Boolean))].sort();
-    const byCat = rows.filter((r) => !category || r.category === category);
-    const byBrand = byCat.filter((r) => !brand || r.brand === brand);
-    const byType = byBrand.filter((r) => !equipment_type || r.equipment_type === equipment_type);
-    res.json({
-      category: uniq(rows, "category"),
-      brand: uniq(byCat, "brand"),
-      equipment_type: uniq(byBrand, "equipment_type"),
-      power_type: uniq(byType, "power_type"),
+    const { data, error } = await supabase.rpc("ceks_entry_facets", {
+      p_category: category || null,
+      p_brand: brand || null,
+      p_type: equipment_type || null,
     });
+    if (error) throw new Error(error.message);
+    res.json(data);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error("[admin/filters]", err.message);
+    res.status(500).json({ error: "Something went wrong." });
   }
 });
 
-/** GET /api/admin/stats — dashboard statistics. */
+/** GET /api/admin/stats — dashboard statistics, aggregated in Postgres (exact at any scale). */
 router.get("/stats", canRead, async (_req, res) => {
   try {
-    const { data } = await supabase.from("ceks_knowledge_entries").select("current_status,category,brand,power_type");
-    const rows = data || [];
-    const countBy = (k) => rows.reduce((m, r) => ((m[r[k] || "—"] = (m[r[k] || "—"] || 0) + 1), m), {});
-    res.json({
-      total: rows.length,
-      byStatus: countBy("current_status"),
-      byCategory: countBy("category"),
-      byBrand: countBy("brand"),
-      byPowerType: countBy("power_type"),
-    });
+    const { data, error } = await supabase.rpc("ceks_entry_stats");
+    if (error) throw new Error(error.message);
+    res.json(data);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error("[admin/stats]", err.message);
+    res.status(500).json({ error: "Something went wrong." });
   }
 });
 
-/** POST /api/admin/bulk-approve  { ids: [] } */
+/** POST /api/admin/bulk-approve  { ids: [] } — returns a per-id result so failures are never hidden. */
 router.post("/bulk-approve", canApprove, async (req, res) => {
   try {
     const ids = Array.isArray(req.body.ids) ? req.body.ids : [];
+    const results = [];
     let approved = 0;
     for (const id of ids) {
-      try { await approveAndIndex(id, "Bulk approved"); approved++; } catch {}
+      try {
+        await approveAndIndex(id, "Bulk approved", req.user);
+        approved++;
+        results.push({ id, ok: true });
+      } catch (e) {
+        // most commonly a 409: the entry still has unresolved recommendations
+        results.push({ id, ok: false, error: e.message, blockers: e.blockers || undefined });
+      }
     }
-    res.json({ ok: true, approved, total: ids.length });
+    res.json({ ok: true, approved, failed: ids.length - approved, total: ids.length, results });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error("[admin/bulk-approve]", err.message);
+    res.status(500).json({ error: "Something went wrong." });
   }
 });
 
-/** POST /api/admin/bulk-reject  { ids: [], comment } */
+/** POST /api/admin/bulk-reject  { ids: [], comment } — per-id result. */
 router.post("/bulk-reject", canApprove, async (req, res) => {
   try {
     const ids = Array.isArray(req.body.ids) ? req.body.ids : [];
-    let done = 0;
+    const results = [];
+    let rejected = 0;
     for (const id of ids) {
-      try { await setStatus(id, "rejected", req.body.comment || "Bulk rejected"); done++; } catch {}
+      try {
+        await setStatus(id, "rejected", req.body.comment || "Bulk rejected", req.user);
+        rejected++;
+        results.push({ id, ok: true });
+      } catch (e) {
+        results.push({ id, ok: false, error: e.message });
+      }
     }
-    res.json({ ok: true, rejected: done, total: ids.length });
+    res.json({ ok: true, rejected, failed: ids.length - rejected, total: ids.length, results });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error("[admin/bulk-reject]", err.message);
+    res.status(500).json({ error: "Something went wrong." });
   }
 });
 

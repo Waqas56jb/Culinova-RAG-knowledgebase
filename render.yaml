@@ -1,6 +1,9 @@
-# Recommended backend host: Render (persistent Node server, no request timeout,
-# runs the Express app as-is). Frontends stay on Vercel.
-# Deploy: Render Dashboard → New → Blueprint → pick this repo.
+# Backend host: Render (persistent Node server, no request timeout, runs the Express app as-is).
+# Frontends stay on Vercel. Deploy: Render Dashboard → New → Blueprint → pick this repo.
+#
+# NOTE: the server is currently also deployed on Vercel (see the frontends' VITE_API_BASE). Pick ONE
+# backend host and set the same environment there. In particular JWT_SECRET must be set on WHICHEVER
+# host runs the API — without it the server fails every sign-in by design (see server/src/config/env.js).
 services:
   - type: web
     name: culinova-eos-server
@@ -8,20 +11,44 @@ services:
     rootDir: server
     plan: free
     buildCommand: npm install
+    # Converge the schema on every deploy. migrate.js is guarded: it applies only additive migrations
+    # and refuses to run the destructive bootstrap against a populated database.
+    preDeployCommand: npm run migrate
     startCommand: npm start
-    healthCheckPath: /api/health
+    # Point the platform health check at READINESS (proves the DB answers), not bare liveness.
+    healthCheckPath: /api/health/ready
     envVars:
+      - key: NODE_ENV
+        value: production
+      # AUTH — required. A guessable/absent signing key means no authentication at all, so the app
+      # refuses to boot in production without it. Render generates a strong random value on first deploy.
+      - key: JWT_SECRET
+        generateValue: true
+      - key: AUTH_ACCESS_TTL
+        value: 12h
+      - key: AUTH_REFRESH_DAYS
+        value: "30"
+      # Database — used by the migration step (direct Postgres connection).
+      - key: DATABASE_URL
+        sync: false
+      # Supabase (the app's data client).
       - key: SUPABASE_URL
         sync: false
       - key: SUPABASE_SERVICE_ROLE_KEY
         sync: false
+      # OpenAI (extraction + embeddings + assistant).
       - key: OPENAI_API_KEY
         sync: false
       - key: OPENAI_EXTRACTION_MODEL
         value: gpt-4o
       - key: OPENAI_EMBEDDING_MODEL
         value: text-embedding-3-small
-      # Optional — Chroma Cloud for semantic search in production.
-      # Leave unset to use text search.
+      # CORS — the exact browser origins of the admin + client apps (comma-separated). Prefer this
+      # over the *.vercel.app wildcard, which is off unless CORS_ALLOW_VERCEL is set.
+      - key: CORS_ORIGINS
+        sync: false
+      # Optional — Chroma Cloud for semantic search. Leave unset to use text search.
       - key: CHROMA_URL
         sync: false
+      - key: CHROMA_COLLECTION
+        value: ceks_knowledge
