@@ -1,7 +1,10 @@
 import React, { useEffect, useRef, useState } from "react";
 import { api } from "../api.js";
 import { PageLoader } from "../components/Loader.jsx";
+<<<<<<< HEAD
 import ConfirmModal from "../components/ConfirmModal.jsx";
+=======
+>>>>>>> bc87eb820bc0f636a95c3d98dfef902ce9843d54
 import { EmptyState, PageHero, PagePanel, StatPill } from "../components/PageShell.jsx";
 
 const STATUS_LABEL = { draft: "Draft", under_review: "Under Review", approved: "Approved", rejected: "Rejected" };
@@ -127,6 +130,7 @@ export default function Drafts({ onOpen, initialFilter }) {
         </div>
       )}
 
+<<<<<<< HEAD
       {notice && (
         <div className={notice.approved >= notice.total ? "notice" : "alert soft"} role="status">
           {notice.approved} of {notice.total} approved
@@ -135,6 +139,9 @@ export default function Drafts({ onOpen, initialFilter }) {
       )}
 
       {error && <div className="alert" role="alert">{error}</div>}
+=======
+      {error && <div className="alert">{error}</div>}
+>>>>>>> bc87eb820bc0f636a95c3d98dfef902ce9843d54
       {!loading && !items.length && (
         <EmptyState icon="📦" title="No models found" text="Try changing your filters or import new equipment." />
       )}
@@ -176,6 +183,7 @@ export default function Drafts({ onOpen, initialFilter }) {
       {!loading && items.length < total && (
         <div className="center"><button className="btn" onClick={() => load(page + 1, true)}>Load more</button></div>
       )}
+<<<<<<< HEAD
 
       {modal?.type === "bulk-approve" && (
         <ConfirmModal
@@ -200,6 +208,8 @@ export default function Drafts({ onOpen, initialFilter }) {
           onCancel={() => { if (!busy) { setModal(null); setError(""); } }}
         />
       )}
+=======
+>>>>>>> bc87eb820bc0f636a95c3d98dfef902ce9843d54
     </PagePanel>
   );
 }

@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { api } from "../api.js";
+<<<<<<< HEAD
 import MEPDiagram from "@shared/components/MEPDiagram.jsx";
 import AIAssistant from "@shared/components/AIAssistant.jsx";
 import Recommendations from "../components/Recommendations.jsx";
@@ -8,6 +9,65 @@ import { Btn, PageLoader } from "../components/Loader.jsx";
 import { PagePanel } from "../components/PageShell.jsx";
 import { normName, fieldMatch, buildSectionRows, planSections } from "@shared/lib/sections.js";
 import { resolveStorageUrl, isFramableStorageUrl } from "@shared/lib/storageUrl.js";
+=======
+import MEPDiagram from "../components/MEPDiagram.jsx";
+import AIAssistant from "../components/AIAssistant.jsx";
+import Recommendations from "../components/Recommendations.jsx";
+import { Btn, PageLoader } from "../components/Loader.jsx";
+import { PagePanel } from "../components/PageShell.jsx";
+
+const SECTIONS = [
+  ["technical_specification", "Technical Specifications"],
+  ["electrical", "Electrical Design"],
+  ["water_drain", "Water / Drain Requirements"],
+  ["gas", "Gas Requirements"],
+  ["ventilation", "Ventilation Requirements"],
+  ["dimensions_clearance", "Dimensions & Clearances"],
+  ["connection_point", "MEP Connection Points"],
+  ["installation", "Installation Requirements"],
+  ["other", "Other"],
+];
+
+// Canonical engineering checklist (from the engineering requirements). Every field below
+// is ALWAYS shown for its section — filled from extracted data, or left blank for the
+// engineer to complete. { photo:true } fields accept a component photo upload.
+const REQUIRED_FIELDS = {
+  technical_specification: ["Capacity", "Material", "Operating Temperature"],
+  electrical: [
+    "Voltage", "Frequency", "Total Power",
+    "Socket Type", "Socket Rating", "Socket Installation Height (from finished floor)", { name: "Socket Photo", photo: true },
+    "Isolator Switch Type", "Isolator Switch Rating", "Isolator Installation Height (from finished floor)", { name: "Isolator Switch Photo", photo: true },
+    "Recommended Cable Size", "Recommended Circuit Breaker",
+    "Cable Entry Location (Bottom / Rear / Top)", "Electrical Connection Position",
+  ],
+  water_drain: [
+    "Cold Water Connection Type", "Cold Water Diameter", "Cold Water Height (from finished floor)",
+    "Hot Water Connection Type", "Hot Water Diameter", "Hot Water Height (from finished floor)",
+    "Drain Connection Type", "Drain Diameter", "Drain Height (from finished floor)", "Drain Method (Gravity / Pumped)",
+  ],
+  gas: [
+    "Gas Connection Diameter", "Gas Connection Height (from finished floor)",
+    "Gas Type (NG / LPG)", "Required Gas Pressure", "Gas Consumption",
+  ],
+  ventilation: [
+    "Exhaust Airflow (CFM or m³/h)", "Fresh Air Requirement", "Heat Rejection", "Steam Exhaust Requirement", "Hood Requirement",
+  ],
+  dimensions_clearance: [
+    "Overall Dimensions", "Machine Weight",
+    "Rear Clearance", "Left Clearance", "Right Clearance", "Top Clearance", "Front Service Clearance", "Floor Fixing Requirements",
+  ],
+  connection_point: [],
+  installation: ["Indoor / Outdoor", "Floor Requirements", "Mounting"],
+  other: [],
+};
+const REQ_LABEL = (f) => (typeof f === "string" ? f : f.name);
+const normName = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+const fieldMatch = (attrName, canonical) => {
+  const a = normName(attrName), c = normName(canonical);
+  if (!a || !c) return false;
+  return a === c || a.startsWith(c) || c.startsWith(a);
+};
+>>>>>>> bc87eb820bc0f636a95c3d98dfef902ce9843d54
 
 export default function Review({ id, onBack }) {
   const [d, setD] = useState(null);
@@ -173,6 +233,7 @@ export default function Review({ id, onBack }) {
 
       {canDecide && (
         <div className="decision">
+<<<<<<< HEAD
           <Btn className="primary" disabled={busy} onClick={() => { setActionErr(""); setModal({ type: "approve" }); }}>Approve</Btn>
           {status === "draft" && <Btn loading={busy && !modal} disabled={busy} onClick={() => runAction("submit")}>Submit for review</Btn>}
           <Btn className="danger" disabled={busy} onClick={() => { setActionErr(""); setModal({ type: "reject" }); }}>Reject</Btn>
@@ -217,6 +278,13 @@ export default function Review({ id, onBack }) {
           onCancel={() => { if (!busy) { setModal(null); setActionErr(""); } }}
         />
       )}
+=======
+          <Btn className="primary" loading={busy} onClick={() => doAction("approve")}>Approve</Btn>
+          {status === "draft" && <Btn loading={busy} onClick={() => doAction("submit")}>Submit for review</Btn>}
+          <Btn className="danger" loading={busy} onClick={() => doAction("reject")}>Reject</Btn>
+        </div>
+      )}
+>>>>>>> bc87eb820bc0f636a95c3d98dfef902ce9843d54
     </PagePanel>
   );
 }
