@@ -2,6 +2,9 @@ import React, { useEffect, useState } from "react";
 import { api } from "../api.js";
 import MEPDiagram from "../components/MEPDiagram.jsx";
 import AIAssistant from "../components/AIAssistant.jsx";
+import Recommendations from "../components/Recommendations.jsx";
+import { Btn, PageLoader } from "../components/Loader.jsx";
+import { PagePanel } from "../components/PageShell.jsx";
 
 const SECTIONS = [
   ["technical_specification", "Technical Specifications"],
@@ -138,8 +141,8 @@ export default function Review({ id, onBack }) {
     );
   }
 
-  if (error) return <div className="panel"><button className="btn small" onClick={onBack}>← Back</button><div className="alert">{error}</div></div>;
-  if (!d) return <div className="panel"><div className="muted">Loading…</div></div>;
+  if (error) return <PagePanel accent="teal"><button className="btn small" onClick={onBack}>← Back</button><div className="alert">{error}</div></PagePanel>;
+  if (!d) return <PagePanel accent="teal"><PageLoader label="Loading equipment profile…" /></PagePanel>;
 
   const groups = {};
   (d.attributes || []).forEach((a) => { (groups[a.attr_group] = groups[a.attr_group] || []).push(a); });
@@ -147,7 +150,7 @@ export default function Review({ id, onBack }) {
   const canDecide = status === "draft" || status === "under_review";
 
   return (
-    <div className="panel">
+    <PagePanel accent="teal">
       <button className="btn small ghost" onClick={onBack}>← Back to queue</button>
 
       <EquipmentProfile d={d} status={status} fileUrl={fileUrl} entryId={id} onSaved={load} />
@@ -174,6 +177,8 @@ export default function Review({ id, onBack }) {
           ))}
         </div>
       )}
+
+      <Recommendations entryId={id} />
 
       {groups.electrical || groups.water_drain || groups.gas || groups.ventilation || groups.connection_point ? (
         <div className="group">
@@ -209,12 +214,12 @@ export default function Review({ id, onBack }) {
 
       {canDecide && (
         <div className="decision">
-          <button className="btn primary" disabled={busy} onClick={() => doAction("approve")}>Approve</button>
-          {status === "draft" && <button className="btn" disabled={busy} onClick={() => doAction("submit")}>Submit for review</button>}
-          <button className="btn danger" disabled={busy} onClick={() => doAction("reject")}>Reject</button>
+          <Btn className="primary" loading={busy} onClick={() => doAction("approve")}>Approve</Btn>
+          {status === "draft" && <Btn loading={busy} onClick={() => doAction("submit")}>Submit for review</Btn>}
+          <Btn className="danger" loading={busy} onClick={() => doAction("reject")}>Reject</Btn>
         </div>
       )}
-    </div>
+    </PagePanel>
   );
 }
 

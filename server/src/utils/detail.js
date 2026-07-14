@@ -75,7 +75,31 @@ async function getEntryDetail(entryId) {
   // CAD / media files
   const { data: files } = await supabase.from("ceks_file_assets").select("*").eq("knowledge_entry_id", entryId);
 
-  return { entry, version, model, attributes, notes, documents, files: files || [] };
+  // CULINOVA engineering recommendations (manufacturer data is above, untouched — client item 3).
+  // The ERP and the read-only portal consume these; each carries its rule traceability.
+  let recommendations = [];
+  if (version) {
+    const { data: recs } = await supabase
+      .from("ceks_recommendations")
+      .select("id, parameter_id, value_text, value_num, unit, final_value, final_unit, status, rule_code, rule_version, manufacturer_value, manufacturer_unit, decided_at, ceks_parameters(key,label), ceks_disciplines(code,name)")
+      .eq("version_id", version.id)
+      .eq("is_current", true);
+    recommendations = (recs || [])
+      .filter((r) => !["rejected", "no_rule", "missing_input"].includes(r.status))
+      .map((r) => ({
+        parameter_key: r.ceks_parameters?.key,
+        parameter: r.ceks_parameters?.label,
+        discipline: r.ceks_disciplines?.name || null,
+        value: r.final_value ?? r.value_text ?? (r.value_num != null ? String(r.value_num) : null),
+        unit: r.final_unit || r.unit,
+        status: r.status,
+        manufacturer_value: r.manufacturer_value,
+        manufacturer_unit: r.manufacturer_unit,
+        traceability: r.rule_code ? `Generated from ${r.ceks_disciplines?.name || ""} Rule ${r.rule_code} (v${r.rule_version})`.replace(/\s+/g, " ").trim() : null,
+      }));
+  }
+
+  return { entry, version, model, attributes, notes, documents, files: files || [], recommendations };
 }
 
 module.exports = { getEntryDetail };

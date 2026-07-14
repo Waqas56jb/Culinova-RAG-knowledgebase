@@ -275,6 +275,26 @@ function Detail({ id, onBack }) {
         );
       })}
 
+      {(d.recommendations || []).length > 0 && (
+        <section className="rec-group">
+          <h2>CULINOVA Engineering Recommendations</h2>
+          <table className="spec">
+            <tbody>
+              {d.recommendations.map((r, i) => (
+                <tr key={i}>
+                  <td className="k">{r.parameter}{r.discipline ? <span className="muted"> · {r.discipline}</span> : null}</td>
+                  <td className="v">
+                    <b>{r.value ?? "—"} {r.unit || ""}</b>
+                    {r.manufacturer_value != null && <span className="muted"> (manufacturer: {r.manufacturer_value} {r.manufacturer_unit || ""})</span>}
+                    {r.traceability && <div className="muted" style={{ fontSize: 11 }}>{r.traceability}</div>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      )}
+
       {d.notes?.length > 0 && (
         <section className="rec-group">
           <h2>Engineering Notes</h2>

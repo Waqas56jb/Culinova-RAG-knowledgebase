@@ -11,6 +11,31 @@ const { extractMainImage } = require("../services/pdfImage");
 const { importWorkbook, buildTemplateBuffer } = require("../services/excelImport");
 const { persistDraft } = require("../utils/draft");
 const auth = require("../services/auth");
+const dictSvc = require("../services/params");
+const recs = require("../services/recommendations");
+
+/**
+ * Client item 2 — "after EOS extracts the equipment information, it should automatically compare the
+ * extracted values with the approved CULINOVA Engineering Rules". Policy-controlled by the
+ * auto_apply_on_extract engine setting (Admin Portal). Best-effort: an engine problem must never
+ * lose an upload — the engineer can always run it again from the Review screen.
+ */
+async function autoApplyRules(entryId, actor) {
+  try {
+    const dict = await dictSvc.load();
+    if (!dictSvc.settingBool(dict, "auto_apply_on_extract", true)) return null;
+    const { data: entry } = await supabase
+      .from("ceks_knowledge_entries")
+      .select("current_version_id")
+      .eq("id", entryId)
+      .maybeSingle();
+    if (!entry?.current_version_id) return null;
+    return await recs.generateForVersion(entry.current_version_id, { actor, trigger: "extraction" });
+  } catch (e) {
+    console.warn("[ingest] rules engine auto-apply failed:", e.message);
+    return null;
+  }
+}
 
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 40 * 1024 * 1024 } });
@@ -111,7 +136,9 @@ router.post("/pdf", canIngest, upload.array("files", 10), async (req, res) => {
       }
     } catch (e) { console.warn("[ingest/pdf] image extraction:", e.message); }
 
-    res.json({ ok: true, draft, documents: results.map((r) => ({ id: r.docId, label: r.label })) });
+    const engine = await autoApplyRules(draft.entry_id, req.user);
+
+    res.json({ ok: true, draft, engine, documents: results.map((r) => ({ id: r.docId, label: r.label })) });
   } catch (err) {
     console.error("[ingest/pdf]", err);
     res.status(500).json({ error: err.message });
@@ -144,6 +171,7 @@ router.post("/folder", canIngest, upload.array("files", 400), async (req, res) =
       if (!files.some((f) => f.name.toLowerCase().endsWith(".pdf"))) continue;
       try {
         const r = await ingestModelFiles({ modelPath: dir, files, log: () => {} });
+        await autoApplyRules(r.entry_id, req.user);
         models.push({ ok: true, entry_id: r.entry_id, title: r.title, counts: r.counts, versioned: r.versioned });
       } catch (e) {
         models.push({ ok: false, folder: dir, error: e.message });
@@ -175,6 +203,9 @@ router.post("/excel", canIngest, upload.single("file"), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: "No Excel file uploaded." });
     const r = await importWorkbook(req.file.buffer, { log: () => {} });
+    for (const row of r.results || []) {
+      if (row.ok && row.entry_id) await autoApplyRules(row.entry_id, req.user);
+    }
     res.json({ ok: true, ...r });
   } catch (err) {
     console.error("[ingest/excel]", err);
@@ -208,7 +239,8 @@ router.post("/manual", canIngest, express.json({ limit: "2mb" }), async (req, re
   try {
     const { model = {}, attributes = [], notes = [] } = req.body || {};
     const draft = await persistDraft({ model, attributes, notes, origin: "manual" });
-    res.json({ ok: true, draft });
+    const engine = await autoApplyRules(draft.entry_id, req.user);
+    res.json({ ok: true, draft, engine });
   } catch (err) {
     console.error("[ingest/manual]", err);
     res.status(500).json({ error: err.message });

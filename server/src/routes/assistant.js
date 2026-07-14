@@ -100,4 +100,67 @@ router.post("/entries/:id/engineering-notes", gateEntry, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+/** POST /api/entries/:id/checklist  { type: commissioning|maintenance|installation|method_statement } */
+router.post("/entries/:id/checklist", gateEntry, async (req, res) => {
+  try {
+    const prompts = {
+      commissioning: "Generate a numbered commissioning checklist for this equipment, grouped by discipline (electrical, water, drain, gas, ventilation). Each step must be verifiable and based only on the data provided.",
+      maintenance: "Generate a numbered preventive-maintenance checklist for this equipment with suggested frequency per task, based only on the data provided.",
+      installation: "Generate a numbered installation checklist for this equipment covering positioning, clearances, and each utility connection, based only on the data provided.",
+      method_statement: "Write a concise installation method statement for this equipment: scope, prerequisites, step-by-step method per utility, and final verification. Base it only on the data provided.",
+    };
+    const type = prompts[req.body?.type] ? req.body.type : "commissioning";
+    res.json({ type, answer: await answer(req.params.id, prompts[type]) });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+/**
+ * PROJECT-LEVEL ASSISTANT (client item 17) — answers ONLY from the project's approved equipment
+ * data and the approved CULINOVA recommendations. Every answer cites its equipment sources.
+ */
+const schedules = require("../services/schedules");
+
+function projectContext(data) {
+  let ctx = `PROJECT: ${data.project.name}${data.project.code ? ` (${data.project.code})` : ""}\n` +
+    `Client: ${data.project.client || "-"} | Location: ${data.project.location || "-"} | Items: ${data.items.length}\n\n`;
+  for (const loaded of data.items) {
+    ctx += `── [${loaded.item.item_number || "?"}] ${loaded.entry.title} × ${loaded.item.qty || 1}` +
+      `${loaded.item.area ? ` @ ${loaded.item.area}` : ""}\n`;
+    const attrs = loaded.attributes.slice(0, 60);
+    for (const a of attrs) {
+      ctx += `   - ${a.name}: ${a.value ?? ""}${a.unit ? " " + a.unit : ""}` +
+        `${a.source_document ? ` (${a.source_document}${a.source_page ? ", p." + a.source_page : ""})` : ""}\n`;
+    }
+    const recs = loaded.recommendations.filter((r) => !["rejected", "no_rule", "missing_input"].includes(r.status));
+    if (recs.length) {
+      ctx += `   CULINOVA RECOMMENDATIONS:\n`;
+      for (const r of recs) {
+        const v = r.final_value ?? r.value_text ?? r.value_num;
+        if (v == null) continue;
+        ctx += `   - ${v}${r.unit ? " " + r.unit : ""} [Rule ${r.rule_code || "?"} v${r.rule_version || "?"}, ${r.status}]\n`;
+      }
+    }
+  }
+  return ctx;
+}
+
+router.post("/projects/:id/ask", auth.authRequired, auth.requirePermission("project.read"), async (req, res) => {
+  try {
+    const q = (req.body.question || "").trim();
+    if (!q) return res.status(400).json({ error: "Question is required." });
+    const data = await schedules.loadProjectData(req.params.id);
+    if (!data.items.length) return res.status(409).json({ error: "This project has no equipment yet." });
+
+    const resp = await client.chat.completions.create({
+      model: env.extractionModel,
+      temperature: 0.2,
+      messages: [
+        { role: "system", content: SYSTEM + "\nYou are answering about a PROJECT (a selection of equipment). When you state a value, name the equipment item (its item number and title) it comes from, and the CULINOVA rule when a recommendation is cited." },
+        { role: "user", content: `${projectContext(data)}\n\nREQUEST: ${q}` },
+      ],
+    });
+    res.json({ answer: resp.choices[0]?.message?.content || "" });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 module.exports = router;
