@@ -1,5 +1,5 @@
 const { env } = require("../config/env");
-const { openai: client } = require("../config/openai");
+const { getOpenAI } = require("../config/openai");
 const { buildTaggedText } = require("./pdf");
 
 const EXTRACTION_SCHEMA = {
@@ -122,7 +122,7 @@ async function extractFromPages(pages, docLabel) {
     `Extract all engineering knowledge from the following page-tagged text.\n\n` +
     tagged;
 
-  const resp = await client.chat.completions.create({
+  const resp = await getOpenAI().chat.completions.create({
     model: env.extractionModel,
     temperature: 0,
     response_format: { type: "json_schema", json_schema: EXTRACTION_SCHEMA },

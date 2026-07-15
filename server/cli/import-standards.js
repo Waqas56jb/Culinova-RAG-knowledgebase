@@ -17,9 +17,14 @@ const cat = require("../src/services/categoryProfiles");
 const COMMIT = process.argv.includes("--commit");
 const AUTOLINK = process.argv.includes("--autolink");
 const ROOT = path.join(__dirname, "..", "..");
+// One entry per equipment-family workbook the client has delivered. Adding a new family is ONE line
+// here (or an upload through the Admin Portal) — no code change.
 const FILES = [
   { domain: "cooking", file: "CULINOVA_Cooking_Engineering_Standards_v1.0.xlsx" },
   { domain: "refrigeration", file: "CULINOVA_Refrigeration_Engineering_Standards_v1.0.xlsx" },
+  { domain: "food_preparation", file: "CULINOVA_Food_Preparation_Engineering_Standards_v1.0_DETAILED.xlsx" },
+  { domain: "warewashing", file: "CULINOVA_Warewashing_Engineering_Standards_v1.0_FULL.xlsx" },
+  { domain: "ice_machines", file: "CULINOVA_Ice_Machines_Engineering_Standards_v1.0_FULL.xlsx" },
 ];
 
 (async () => {

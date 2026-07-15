@@ -1,0 +1,431 @@
+<style>
+  :root {
+    --bg: #f5f7f9;
+    --panel: #ffffff;
+    --panel-2: #fbfcfd;
+    --ink: #10171f;
+    --ink-soft: #3c4653;
+    --muted: #697585;
+    --line: #e4e8ee;
+    --line-strong: #d2d8e0;
+    --accent: #0e7490;       /* blueprint cyan/teal */
+    --accent-deep: #0b5566;
+    --accent-wash: #e6f2f5;
+    --live: #15803d;
+    --live-wash: #e7f4ec;
+    --pending: #b45309;
+    --pending-wash: #fbf0e2;
+    /* MEP data colours — the client's own utility colour language */
+    --mep-elec: #e11d48;
+    --mep-cw: #2563eb;
+    --mep-hw: #ea580c;
+    --mep-drain: #16a34a;
+    --mep-gas: #ca8a04;
+    --mep-exh: #7c3aed;
+    --mep-fa: #0891b2;
+    --shadow: 0 1px 2px rgba(16,23,31,.04), 0 8px 24px rgba(16,23,31,.06);
+    --font-body: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Code", Menlo, Consolas, monospace;
+    --maxw: 1080px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0a0f14; --panel: #121b23; --panel-2: #0f171e;
+      --ink: #e8eef4; --ink-soft: #b9c4d0; --muted: #8391a0;
+      --line: #1e2a34; --line-strong: #293844;
+      --accent: #2bb6cf; --accent-deep: #7fd8e6; --accent-wash: #10242b;
+      --live: #4ade80; --live-wash: #10241a; --pending: #f0a94b; --pending-wash: #2a1e10;
+      --shadow: 0 1px 2px rgba(0,0,0,.4), 0 10px 30px rgba(0,0,0,.5);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0a0f14; --panel: #121b23; --panel-2: #0f171e;
+    --ink: #e8eef4; --ink-soft: #b9c4d0; --muted: #8391a0;
+    --line: #1e2a34; --line-strong: #293844;
+    --accent: #2bb6cf; --accent-deep: #7fd8e6; --accent-wash: #10242b;
+    --live: #4ade80; --live-wash: #10241a; --pending: #f0a94b; --pending-wash: #2a1e10;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 10px 30px rgba(0,0,0,.5);
+  }
+  :root[data-theme="light"] {
+    --bg: #f5f7f9; --panel: #ffffff; --panel-2: #fbfcfd;
+    --ink: #10171f; --ink-soft: #3c4653; --muted: #697585;
+    --line: #e4e8ee; --line-strong: #d2d8e0;
+    --accent: #0e7490; --accent-deep: #0b5566; --accent-wash: #e6f2f5;
+    --live: #15803d; --live-wash: #e7f4ec; --pending: #b45309; --pending-wash: #fbf0e2;
+    --shadow: 0 1px 2px rgba(16,23,31,.04), 0 8px 24px rgba(16,23,31,.06);
+  }
+
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--font-body);
+    line-height: 1.6; -webkit-font-smoothing: antialiased; }
+  .wrap { max-width: var(--maxw); margin: 0 auto; padding: 0 24px; }
+  section { padding: 56px 0; border-top: 1px solid var(--line); }
+  h1, h2, h3 { text-wrap: balance; letter-spacing: -0.02em; line-height: 1.15; }
+  h2 { font-size: clamp(24px, 3.4vw, 34px); margin: 0 0 10px; font-weight: 780; }
+  h3 { font-size: 17px; margin: 0 0 6px; font-weight: 700; }
+  p { margin: 0 0 14px; color: var(--ink-soft); max-width: 68ch; }
+  a { color: var(--accent); }
+  .eyebrow { font-family: var(--font-mono); font-size: 11.5px; letter-spacing: .18em;
+    text-transform: uppercase; color: var(--accent); font-weight: 600; margin: 0 0 14px; }
+  .lede { font-size: 18px; color: var(--ink); max-width: 70ch; }
+  .mono { font-family: var(--font-mono); }
+  strong { color: var(--ink); font-weight: 650; }
+
+  /* Header */
+  header.hero { background:
+      radial-gradient(120% 100% at 100% 0%, var(--accent-wash) 0%, transparent 55%),
+      var(--panel);
+    border-bottom: 1px solid var(--line); }
+  .hero-inner { padding: 60px 0 52px; }
+  .hero h1 { font-size: clamp(34px, 6vw, 58px); font-weight: 820; margin: 0 0 20px; }
+  .hero h1 .accent { color: var(--accent); }
+  .hero .lede { font-size: clamp(17px, 2.2vw, 21px); color: var(--ink-soft); }
+  .metabar { display: flex; flex-wrap: wrap; gap: 10px 26px; margin-top: 28px;
+    font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
+  .metabar b { color: var(--ink); font-weight: 600; }
+  .tag { display: inline-flex; align-items: center; gap: 7px; font-family: var(--font-mono);
+    font-size: 11px; letter-spacing: .08em; text-transform: uppercase; padding: 5px 11px;
+    border-radius: 999px; border: 1px solid var(--line-strong); background: var(--panel-2); color: var(--ink-soft); }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
+
+  /* Stat strip */
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px;
+    background: var(--line); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; margin-top: 34px; }
+  .stat { background: var(--panel); padding: 20px 22px; }
+  .stat .n { font-size: 30px; font-weight: 800; letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
+  .stat .l { font-family: var(--font-mono); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin-top: 4px; }
+
+  /* Layer stack diagram */
+  .stack { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+  .layer { display: grid; grid-template-columns: 44px 1fr; gap: 16px; align-items: stretch;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px;
+    box-shadow: var(--shadow); position: relative; }
+  .layer .ln { font-family: var(--font-mono); font-size: 12px; color: var(--muted); font-weight: 600;
+    display: flex; align-items: center; justify-content: center; border-right: 1px solid var(--line); }
+  .layer h3 { display: flex; align-items: center; gap: 10px; }
+  .layer p { margin: 4px 0 0; font-size: 14.5px; }
+  .layer .rail { position: absolute; left: 0; top: 12px; bottom: 12px; width: 3px; border-radius: 3px; background: var(--accent); }
+  .flow-arrow { text-align: center; color: var(--line-strong); font-size: 15px; line-height: .5; margin: -2px 0; }
+
+  /* Two-column concept */
+  .cols2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 22px; }
+  .cardp { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 22px; box-shadow: var(--shadow); }
+  .cardp .kicker { font-family: var(--font-mono); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--accent); margin-bottom: 8px; }
+  .cardp ul { margin: 10px 0 0; padding-left: 0; list-style: none; }
+  .cardp li { padding: 6px 0 6px 20px; position: relative; font-size: 14px; color: var(--ink-soft); border-top: 1px dashed var(--line); }
+  .cardp li:first-child { border-top: 0; }
+  .cardp li::before { content: "›"; position: absolute; left: 3px; color: var(--accent); font-weight: 700; }
+
+  /* Table-group grid */
+  .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 20px; }
+  .tg { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; }
+  .tg h3 { font-size: 14px; display: flex; align-items: center; gap: 8px; }
+  .tg h3 .sq { width: 9px; height: 9px; border-radius: 2px; background: var(--accent); }
+  .tg .tables { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 5px; }
+  .tg code { font-family: var(--font-mono); font-size: 11px; background: var(--panel-2); border: 1px solid var(--line);
+    color: var(--ink-soft); padding: 3px 7px; border-radius: 6px; }
+  .tg p { font-size: 13px; margin: 10px 0 0; }
+
+  /* directive chips */
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+  .chip { display: inline-flex; align-items: center; gap: 8px; padding: 9px 13px; border-radius: 10px;
+    border: 1px solid var(--line); background: var(--panel); font-size: 13px; box-shadow: var(--shadow); }
+  .chip b { font-weight: 650; }
+  .chip small { color: var(--muted); font-size: 12px; }
+  .chip .pill { font-family: var(--font-mono); font-size: 10px; padding: 2px 6px; border-radius: 5px; }
+  .chip.pend { border-color: color-mix(in srgb, var(--pending) 40%, var(--line)); }
+  .chip.pend .pill { background: var(--pending-wash); color: var(--pending); }
+
+  /* MEP legend */
+  .mep { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 18px; }
+  .mep .u { display: flex; align-items: center; gap: 10px; padding: 11px 13px; background: var(--panel);
+    border: 1px solid var(--line); border-radius: 10px; font-size: 13px; }
+  .mep .u .swatch { width: 16px; height: 16px; border-radius: 5px; flex: none; }
+  .mep .u .code { font-family: var(--font-mono); font-size: 11px; color: var(--muted); margin-left: auto; }
+
+  /* worked example */
+  .example { background: var(--panel-2); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; margin-top: 22px; }
+  .example .row { display: grid; grid-template-columns: 150px 1fr; gap: 0; border-top: 1px solid var(--line); }
+  .example .row:first-child { border-top: 0; }
+  .example .k { font-family: var(--font-mono); font-size: 11.5px; letter-spacing: .04em; text-transform: uppercase;
+    color: var(--muted); padding: 13px 18px; background: var(--panel); display: flex; align-items: center; }
+  .example .v { padding: 13px 18px; font-size: 14.5px; color: var(--ink); }
+  .example .v .hl { color: var(--accent); font-weight: 650; }
+  .example .v code { font-family: var(--font-mono); font-size: 13px; background: var(--panel); padding: 2px 6px; border-radius: 5px; border: 1px solid var(--line); }
+  .example .trace { color: var(--muted); font-size: 12.5px; }
+
+  /* pipeline */
+  .pipe { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 0; margin-top: 22px;
+    border: 1px solid var(--line); border-radius: 14px; overflow: hidden; background: var(--panel); }
+  .pipe .step { padding: 18px 16px; border-right: 1px solid var(--line); position: relative; }
+  .pipe .step:last-child { border-right: 0; }
+  .pipe .step .n { font-family: var(--font-mono); font-size: 11px; color: var(--accent); font-weight: 600; }
+  .pipe .step h3 { font-size: 13.5px; margin: 8px 0 5px; }
+  .pipe .step p { font-size: 12.5px; margin: 0; }
+
+  /* status table */
+  table.status { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 14px;
+    border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+  table.status th { text-align: left; font-family: var(--font-mono); font-size: 11px; letter-spacing: .06em;
+    text-transform: uppercase; color: var(--muted); font-weight: 600; padding: 12px 16px; background: var(--panel-2); border-bottom: 1px solid var(--line); }
+  table.status td { padding: 13px 16px; border-bottom: 1px solid var(--line); color: var(--ink-soft); vertical-align: top; }
+  table.status tr:last-child td { border-bottom: 0; }
+  table.status td b { color: var(--ink); }
+  .badge { font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .04em; text-transform: uppercase;
+    padding: 3px 9px; border-radius: 999px; font-weight: 600; white-space: nowrap; }
+  .badge.live { background: var(--live-wash); color: var(--live); }
+  .badge.pend { background: var(--pending-wash); color: var(--pending); }
+
+  .callout { display: grid; grid-template-columns: 4px 1fr; gap: 16px; background: var(--panel);
+    border: 1px solid var(--line); border-radius: 14px; padding: 22px 24px; margin-top: 22px; box-shadow: var(--shadow); }
+  .callout .bar { background: var(--pending); border-radius: 4px; }
+  .callout.good .bar { background: var(--live); }
+  .callout h3 { margin-bottom: 6px; }
+  .callout p:last-child { margin-bottom: 0; }
+
+  footer { padding: 44px 0 60px; color: var(--muted); font-size: 13px; }
+  footer .mono { color: var(--ink-soft); }
+
+  @media (max-width: 860px) {
+    .stats { grid-template-columns: repeat(2, 1fr); }
+    .cols2, .grid3, .mep { grid-template-columns: 1fr; }
+    .pipe { grid-auto-flow: row; grid-auto-columns: auto; }
+    .pipe .step { border-right: 0; border-bottom: 1px solid var(--line); }
+    .pipe .step:last-child { border-bottom: 0; }
+    .example .row { grid-template-columns: 1fr; }
+    .example .k { border-bottom: 1px solid var(--line); }
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .layer, .cardp, .tg, .chip { transition: transform .15s ease, box-shadow .15s ease; }
+  }
+</style>
+
+<header class="hero">
+  <div class="wrap hero-inner">
+    <p class="eyebrow">CULINOVA EOS · Phase 2 · System Architecture</p>
+    <h1>The <span class="accent">engineering brain</span> of&nbsp;EOS, and how every&nbsp;piece connects.</h1>
+    <p class="lede">This is one architecture, not a collection of files. The Engineering Standards you deliver become structured knowledge; the Rules Engine turns that knowledge into calculated, validated, fully-traceable engineering recommendations; and those recommendations drive MEP point schedules, project engineering schedules, drawings, and the AI assistant. Nothing is hardcoded — the system is built to grow as data.</p>
+    <div class="metabar">
+      <span class="tag"><span class="dot"></span> Prepared for CULINOVA — Engineering Review</span>
+      <span>Document&nbsp;<b>v1.0</b></span>
+      <span>Scope&nbsp;<b>EOS Phase 2 — Engineering Knowledge Base</b></span>
+      <span>Status&nbsp;<b>Live system, verified</b></span>
+    </div>
+    <div class="stats">
+      <div class="stat"><div class="n">5&nbsp;/&nbsp;9</div><div class="l">Equipment families loaded</div></div>
+      <div class="stat"><div class="n">73</div><div class="l">Category standards</div></div>
+      <div class="stat"><div class="n">4,500</div><div class="l">Classified data points</div></div>
+      <div class="stat"><div class="n">~60</div><div class="l">Data-driven tables</div></div>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <section>
+    <p class="eyebrow">The core idea</p>
+    <h2>Two kinds of engineering knowledge, kept separate on purpose</h2>
+    <p>EOS is designed around one principle that keeps it generalized rather than hardcoded: it separates <strong>what</strong> each equipment category needs from <strong>how</strong> to size and calculate it. These two layers are authored and stored independently, so either can grow without touching the other — or the code.</p>
+    <div class="cols2">
+      <div class="cardp">
+        <div class="kicker">Layer A — the knowledge</div>
+        <h3>Engineering Standards Library</h3>
+        <p style="font-size:14px">Your workbooks. One profile per equipment category, defining every engineering requirement.</p>
+        <ul>
+          <li>Required utilities — electrical, water, gas, drainage, ventilation</li>
+          <li>Installation, mechanical &amp; performance characteristics</li>
+          <li>Safety &amp; hygiene requirements, fixed CULINOVA values</li>
+          <li>Which values are manufacturer-dependent vs. rule-driven</li>
+        </ul>
+      </div>
+      <div class="cardp">
+        <div class="kicker">Layer B — the calculation</div>
+        <h3>Discipline Rules</h3>
+        <p style="font-size:14px">The Electrical, Gas &amp; ASHRAE Ventilation rule tables — the engineering math.</p>
+        <ul>
+          <li>Condition → output tables (e.g. current band → cable &amp; breaker)</li>
+          <li>Derivation formulas (e.g. current from power, voltage &amp; phase)</li>
+          <li>Calculations (e.g. exhaust airflow by hood grouping)</li>
+          <li>Editable, versioned, engineer-approved — never in code</li>
+        </ul>
+      </div>
+    </div>
+    <p style="margin-top:20px">A Combi Oven standard says: <em>“needs a dedicated circuit, cold water, a Type&nbsp;I hood, 1000&nbsp;mm clearance — and its cable and breaker come from the Electrical Rules.”</em> The Electrical Rules then turn <em>12&nbsp;kW / 400&nbsp;V</em> into a specific cable and breaker. Standards define the requirement; Rules produce the number. That separation is the whole architecture.</p>
+  </section>
+
+  <section>
+    <p class="eyebrow">Architecture at a glance</p>
+    <h2>Seven layers, each one data, each one connected</h2>
+    <p>Every layer reads from the one above it and feeds the one below. Add an equipment family, a rule, a parameter, or a utility colour, and it flows through the whole stack with no code change.</p>
+    <div class="stack">
+      <div class="layer"><span class="rail"></span><div class="ln">0</div><div><h3>Foundation</h3><p>The canonical vocabulary (Parameter Dictionary), engineering disciplines, unit conversions, engine policy settings, roles &amp; permissions — all editable data.</p></div></div>
+      <div class="flow-arrow">▾</div>
+      <div class="layer"><span class="rail"></span><div class="ln">1</div><div><h3>Engineering Standards Library</h3><p>Your category workbooks, imported and understood: one profile per equipment category, every column classified by what it <em>means</em>.</p></div></div>
+      <div class="flow-arrow">▾</div>
+      <div class="layer"><span class="rail"></span><div class="ln">2</div><div><h3>Rules Engine</h3><p>Approved discipline rules — conditions, outputs, and formulas — matched against equipment data to recommend and calculate engineering values.</p></div></div>
+      <div class="flow-arrow">▾</div>
+      <div class="layer"><span class="rail"></span><div class="ln">3</div><div><h3>Recommendations &amp; Validation</h3><p>Manufacturer value vs. CULINOVA recommendation, side by side, with full traceability. The engineer accepts, modifies, or rejects — with a reason.</p></div></div>
+      <div class="flow-arrow">▾</div>
+      <div class="layer"><span class="rail"></span><div class="ln">4</div><div><h3>Project Workspace &amp; MEP</h3><p>Select approved equipment into a project → coloured MEP points, 13 engineering schedules, AutoCAD-ready exports, and the drawing workspace.</p></div></div>
+      <div class="flow-arrow">▾</div>
+      <div class="layer"><span class="rail"></span><div class="ln">5</div><div><h3>AI Engineering Assistant</h3><p>Answers only from approved equipment data, approved standards, and approved recommendations — every answer cited, nothing invented.</p></div></div>
+      <div class="flow-arrow">▾</div>
+      <div class="layer"><span class="rail"></span><div class="ln">6</div><div><h3>ERP Integration</h3><p>Approved equipment publishes to the ERP Item Master. EOS stays the master of engineering truth; the ERP handles pricing, stock, procurement &amp; projects.</p></div></div>
+    </div>
+  </section>
+
+  <section>
+    <p class="eyebrow">Database structure</p>
+    <h2>~60 tables, organised by layer — all knowledge is data</h2>
+    <p>There is no engineering knowledge hardcoded anywhere in the system. Adding a discipline, a rule, a parameter, or a utility colour is a row in a table, applied through the Admin Portal or an Excel upload. The schema is managed by ordered, additive migrations (currently&nbsp;<span class="mono">001–011</span>).</p>
+    <div class="grid3">
+      <div class="tg"><h3><span class="sq" style="background:var(--accent)"></span> Foundation</h3><div class="tables"><code>ceks_parameters</code><code>ceks_parameter_aliases</code><code>ceks_disciplines</code><code>ceks_unit_conversions</code><code>ceks_engine_settings</code></div><p>The canonical vocabulary that lets a rule match a fact no matter how the datasheet spelled it.</p></div>
+      <div class="tg"><h3><span class="sq" style="background:var(--mep-drain)"></span> Standards Library</h3><div class="tables"><code>ceks_category_profiles</code><code>ceks_category_profile_attributes</code></div><p>One profile per equipment category; one classified row per requirement. Your engineering brain, stored.</p></div>
+      <div class="tg"><h3><span class="sq" style="background:var(--mep-elec)"></span> Rules Engine</h3><div class="tables"><code>ceks_rules</code><code>ceks_rule_conditions</code><code>ceks_rule_outputs</code><code>ceks_rule_constants</code><code>ceks_rule_versions</code></div><p>Condition→output tables + editable formulas &amp; constants, each version frozen for traceability.</p></div>
+      <div class="tg"><h3><span class="sq" style="background:var(--mep-hw)"></span> Recommendations</h3><div class="tables"><code>ceks_recommendations</code><code>ceks_validations</code><code>ceks_recommendation_history</code><code>ceks_recalc_alerts</code></div><p>CULINOVA values beside manufacturer values, the missing-info flags, and the full decision trail.</p></div>
+      <div class="tg"><h3><span class="sq" style="background:var(--mep-cw)"></span> Knowledge &amp; Equipment</h3><div class="tables"><code>ceks_knowledge_entries</code><code>ceks_knowledge_versions</code><code>ceks_knowledge_attributes</code><code>ceks_models</code></div><p>The extracted manufacturer data — never overwritten — that rules are applied against.</p></div>
+      <div class="tg"><h3><span class="sq" style="background:var(--mep-exh)"></span> Projects · MEP · Drawings</h3><div class="tables"><code>ceks_projects</code><code>ceks_project_items</code><code>ceks_drawings</code><code>ceks_drawing_points</code><code>ceks_schedule_types</code><code>ceks_utility_point_types</code></div><p>Equipment selection, coloured MEP points, schedules, and annotated drawings.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <p class="eyebrow">Where the standards live</p>
+    <h2>EOS reads the <em>meaning</em> of every value — not just the text</h2>
+    <p>This is the difference between a spreadsheet and a knowledge base. When a standards workbook is imported, EOS does not store it as a table. It classifies <strong>every single cell</strong> by what that value tells the engine to do. The eight directive types below are how EOS understands a category from an engineering perspective — and how it knows exactly what it can compute today versus what is waiting on a discipline rule.</p>
+    <div class="chips">
+      <div class="chip"><span class="pill" style="background:var(--accent-wash);color:var(--accent)">MFR</span><b>Manufacturer</b><small>from the datasheet</small></div>
+      <div class="chip"><span class="pill" style="background:var(--accent-wash);color:var(--accent)">FIX</span><b>Fixed CULINOVA value</b><small>e.g. 1000&nbsp;mm</small></div>
+      <div class="chip"><span class="pill" style="background:var(--accent-wash);color:var(--accent)">POL</span><b>Policy</b><small>Yes / No / Required</small></div>
+      <div class="chip"><span class="pill" style="background:var(--accent-wash);color:var(--accent)">OPT</span><b>Options</b><small>choose-one list</small></div>
+      <div class="chip pend"><span class="pill">RULE</span><b>Discipline rule</b><small>needs a rule table</small></div>
+      <div class="chip pend"><span class="pill">CALC</span><b>Calculation</b><small>needs a formula</small></div>
+      <div class="chip"><span class="pill" style="background:var(--panel-2);color:var(--muted)">N/A</span><b>Not applicable</b></div>
+      <div class="chip"><span class="pill" style="background:var(--panel-2);color:var(--muted)">NOTE</span><b>Engineering note</b></div>
+    </div>
+    <p style="margin-top:22px">Every equipment family workbook is structured slightly differently — different column names, different “not-applicable” markers, extra columns like Data Priority. EOS was built to absorb that variation generically, so the remaining families import with no code change. Today <strong>5 of 9 families</strong> are loaded: <span class="mono">Cooking · Refrigeration · Food Preparation · Warewashing · Ice Machines</span> — 73 category standards, 4,500 classified data points.</p>
+  </section>
+
+  <section>
+    <p class="eyebrow">How standards link to equipment</p>
+    <h2>Each machine is bound to its category standard — safely, never guessed</h2>
+    <p>A standard is only useful once it governs a real piece of equipment. EOS matches an equipment item to its category standard by type. An <strong>exact match links automatically</strong>; a close match is <strong>suggested</strong> for an engineer to confirm; an uncertain match is never forced. This is already working on live equipment in the system:</p>
+    <div class="example">
+      <div class="row"><div class="k">Equipment</div><div class="v">UNOX Combi Oven <span class="trace">(extracted from its datasheet)</span></div></div>
+      <div class="row"><div class="k">Bound standard</div><div class="v"><span class="hl">Cooking → Combi Oven (CAT-011)</span> — auto-linked, exact match</div></div>
+      <div class="row"><div class="k">EOS now knows</div><div class="v">30 engineering requirements apply: dedicated circuit · cold water · Type&nbsp;I hood · 1000&nbsp;mm clearance · fire suppression — plus which values are manufacturer-sourced and which await the Electrical Rules.</div></div>
+      <div class="row"><div class="k">Also live</div><div class="v"><span class="trace">A Vegetable Cutter bound to Food Preparation, an Undercounter Dishwasher bound to Warewashing — automatically.</span></div></div>
+    </div>
+  </section>
+
+  <section>
+    <p class="eyebrow">The Rules Engine &amp; Dictionary</p>
+    <h2>How EOS calculates, validates, and recommends</h2>
+    <p>The Rules Engine contains <strong>no engineering knowledge in code</strong> — no cable table, no formula. It only knows how to compare a rule against equipment data and apply it. The Parameter Dictionary is what makes this possible: it turns every way a datasheet spells a value (“Power Load”, “Connected Load”, “Total Power”) into one canonical parameter a rule can reference.</p>
+    <p>The engine already proves the full electrical chain end-to-end — including deriving a value the datasheet never stated:</p>
+    <div class="example">
+      <div class="row"><div class="k">Manufacturer data</div><div class="v">Phase <code>3-Phase</code> · Voltage <code>400 V</code> · Power <code>12 kW</code> — <span class="trace">no current stated (as usual)</span></div></div>
+      <div class="row"><div class="k">Derivation rule</div><div class="v">Current <span class="hl">= Power × 1000 ÷ (√3 × Voltage × PF)</span> → <code>19.25 A</code> <span class="trace">— formula &amp; power-factor stored as editable engineering data</span></div></div>
+      <div class="row"><div class="k">Recommendation rule</div><div class="v">3-Phase, 16–20 A → Cable <span class="hl">5×6 mm² Cu</span> · Breaker <span class="hl">32 A 3P MCB</span></div></div>
+      <div class="row"><div class="k">Traceability</div><div class="v" style="font-size:13px;color:var(--muted)">Generated from Electrical Rule E-006 (v1.0) · matched on Phase = 3-Phase, Current 16–20 A · input: derived current 19.25 A</div></div>
+    </div>
+    <p style="margin-top:18px">The engine obeys strict policies set by CULINOVA: highest-priority rule wins; two equal rules that disagree raise an <em>engineer conflict</em> — the system never guesses; when no rule matches, the output is left blank and flagged — <strong>never extrapolated</strong>; and when a rule is updated, every affected item is flagged for recalculation, decided deliberately.</p>
+  </section>
+
+  <section>
+    <p class="eyebrow">Manufacturer vs. CULINOVA</p>
+    <h2>Two values, side by side — the engineer signs off</h2>
+    <p>EOS never overwrites the manufacturer’s data. Its extracted value and the CULINOVA recommendation are stored together and shown together, so the engineer compares them and decides. Every recommendation carries its full provenance: the rule ID, rule category, rule version, the exact inputs used, the date generated, and who approved it. The engineer can <strong>accept</strong>, <strong>modify</strong>, or <strong>reject</strong> — and a modify or reject requires a written reason. Approval is blocked until every recommendation is resolved. This is what makes EOS an engineering system of record, not a calculator.</p>
+  </section>
+
+  <section>
+    <p class="eyebrow">MEP calculations, schedules &amp; drawings</p>
+    <h2>From approved equipment to the drawing board</h2>
+    <p>Once equipment is selected into a project, its approved engineering values flow straight into the deliverables — each utility carried on your own colour and symbol language, editable from the Admin Portal.</p>
+    <div class="mep">
+      <div class="u"><span class="swatch" style="background:var(--mep-elec)"></span> Electrical <span class="code">EP</span></div>
+      <div class="u"><span class="swatch" style="background:var(--mep-cw)"></span> Cold Water <span class="code">CW</span></div>
+      <div class="u"><span class="swatch" style="background:var(--mep-hw)"></span> Hot Water <span class="code">HW</span></div>
+      <div class="u"><span class="swatch" style="background:var(--mep-drain)"></span> Drain <span class="code">DR</span></div>
+      <div class="u"><span class="swatch" style="background:var(--mep-gas)"></span> Gas <span class="code">GAS</span></div>
+      <div class="u"><span class="swatch" style="background:var(--mep-exh)"></span> Exhaust <span class="code">EX</span></div>
+      <div class="u"><span class="swatch" style="background:var(--mep-fa)"></span> Fresh Air <span class="code">FA</span></div>
+      <div class="u"><span class="swatch" style="background:var(--muted)"></span> Fire &amp; Safety <span class="code">FS</span></div>
+    </div>
+    <div class="grid3" style="margin-top:16px">
+      <div class="tg"><h3><span class="sq"></span> MEP point schedule</h3><p style="margin-top:2px">Per equipment: every required electrical / water / drain / gas / ventilation point, with value, unit, height, colour &amp; symbol.</p></div>
+      <div class="tg"><h3><span class="sq"></span> 13 engineering schedules</h3><p style="margin-top:2px">Equipment, electrical load, plumbing, cold/hot water, drainage, gas, ventilation, exhaust, fresh-air, installation, clearance, combined MEP.</p></div>
+      <div class="tg"><h3><span class="sq"></span> AutoCAD-ready export</h3><p style="margin-top:2px">Clean schedules + coordinate/point exports (X, Y, rotation, colour, symbol) formatted to drop straight into your CAD drawings.</p></div>
+    </div>
+    <p style="margin-top:18px">The drawing workspace lets the team upload a plan, place equipment, attach coloured MEP points, toggle utility layers, annotate, and export an annotated PDF with a legend and revision — all within scope, and all driven by the same approved engineering values.</p>
+  </section>
+
+  <section>
+    <p class="eyebrow">End to end</p>
+    <h2>One flow, datasheet to deliverable</h2>
+    <div class="pipe">
+      <div class="step"><div class="n">01</div><h3>Extract</h3><p>AI reads the manufacturer datasheet into structured, source-cited data.</p></div>
+      <div class="step"><div class="n">02</div><h3>Match</h3><p>Equipment is bound to its category standard — its full engineering requirement set.</p></div>
+      <div class="step"><div class="n">03</div><h3>Apply &amp; derive</h3><p>Rules run; missing inputs are derived by formula; nothing is guessed.</p></div>
+      <div class="step"><div class="n">04</div><h3>Recommend</h3><p>Manufacturer vs CULINOVA, with traceability. Engineer accepts / modifies / rejects.</p></div>
+      <div class="step"><div class="n">05</div><h3>Generate</h3><p>MEP points, schedules, drawings, AI answers — and publish to the ERP.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <p class="eyebrow">Where we are — honestly</p>
+    <h2>The platform is built and proven. It is waiting on knowledge, not code.</h2>
+    <p>The entire architecture above is live and verified. What remains is not development — it is the engineering knowledge itself, which is exactly what CULINOVA is preparing. EOS already tracks precisely what it is waiting for, per equipment, so nothing is lost or vague.</p>
+    <table class="status">
+      <thead><tr><th>Capability</th><th>State</th><th>Detail</th></tr></thead>
+      <tbody>
+        <tr><td><b>Engineering Standards Library</b></td><td><span class="badge live">Live</span></td><td>5 of 9 families loaded — 73 standards, 4,500 classified data points. Remaining: Beverage, Bakery, Ventilation, Laundry.</td></tr>
+        <tr><td><b>Rules Engine &amp; Dictionary</b></td><td><span class="badge live">Live</span></td><td>Condition→output rules, derivation formulas, priority/conflict, traceability — all proven on the electrical example.</td></tr>
+        <tr><td><b>Recommendations &amp; validation</b></td><td><span class="badge live">Live</span></td><td>Manufacturer vs CULINOVA, engineer accept/modify/reject, approval gating, recalculation alerts.</td></tr>
+        <tr><td><b>Projects · MEP · schedules · drawings · AI</b></td><td><span class="badge live">Live</span></td><td>Equipment selection, coloured MEP points, 13 schedules, AutoCAD export, drawing workspace, cited AI assistant.</td></tr>
+        <tr><td><b>Electrical Rules table</b></td><td><span class="badge pend">Awaiting</span></td><td>157 references across the loaded standards are ready to resolve the moment this table arrives.</td></tr>
+        <tr><td><b>Gas Rules table</b></td><td><span class="badge pend">Awaiting</span></td><td>16 references (gas pipe sizing) ready to resolve.</td></tr>
+        <tr><td><b>ASHRAE Ventilation Rules</b></td><td><span class="badge pend">Awaiting</span></td><td>~145 calculation points (exhaust / make-up air by hood grouping) ready to resolve. The engine already runs these formulas.</td></tr>
+      </tbody>
+    </table>
+    <div class="callout good">
+      <div class="bar"></div>
+      <div>
+        <h3>The key point</h3>
+        <p>When the Electrical, Gas, and ASHRAE Ventilation rule tables arrive — in the same structured form as the standards — EOS begins calculating cable sizes, breakers, gas pipe sizes, and exhaust airflow automatically, per equipment, with full traceability. <strong>No rebuild.</strong> The nervous system is in place; it is waiting for the last of the knowledge.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <p class="eyebrow">Roadmap to a complete engineering brain</p>
+    <h2>What completes the picture</h2>
+    <div class="cols2">
+      <div class="cardp">
+        <div class="kicker">Knowledge — from CULINOVA</div>
+        <ul>
+          <li>Remaining 4 equipment families (Beverage, Bakery, Ventilation, Laundry)</li>
+          <li>Electrical Rules table (current band → cable, breaker, connection)</li>
+          <li>Gas Rules table (load → pipe size, isolation)</li>
+          <li>ASHRAE Ventilation Rules (equipment / hood → exhaust &amp; make-up air)</li>
+        </ul>
+      </div>
+      <div class="cardp">
+        <div class="kicker">System — already delivered &amp; ready</div>
+        <ul>
+          <li>Generalized import for any family workbook — upload, review, validate</li>
+          <li>Rule Management Panel with Excel rule import &amp; versioning</li>
+          <li>Automatic recommendation, validation &amp; recalculation</li>
+          <li>MEP, schedules, AutoCAD export, drawings, AI, and ERP publish</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <p class="mono">CULINOVA EOS — Engineering Intelligence Platform · Phase 2 Architecture Overview · v1.0</p>
+    <p>Prepared by the EOS development team for CULINOVA engineering review. Every figure in this document reflects the live, verified system. Where a capability depends on knowledge still being prepared by CULINOVA, it is marked <span style="color:var(--pending);font-weight:600">Awaiting</span> — not implied as complete.</p>
+  </div>
+</footer>

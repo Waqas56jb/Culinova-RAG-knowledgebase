@@ -16,18 +16,29 @@ const dictSvc = require("./params");
 const clean = (v) => (v == null ? null : String(v).trim() || null);
 const nowIso = () => new Date().toISOString();
 
-// Header → identity field. The rest of the columns become classified attributes.
+/**
+ * Header → identity field. The rest of the columns become classified attributes.
+ *
+ * Each equipment-family workbook names these slightly differently (Cooking/Refrigeration use
+ * "Rule ID" + "Equipment Category" + "Heat Source"/"Installation Type"; Food Preparation uses
+ * "Category Code" + "Category" + "Product Type"). We accept every spelling seen so far, so a new
+ * family workbook imports without a code change — which is the whole point of this pipeline.
+ * Matching is exact (lower-cased), so "category code" and "category" never collide.
+ */
 const IDENTITY = {
-  code: ["rule id"],
-  category_name: ["equipment category"],
-  family: ["equipment family"],
-  engineering_group: ["engineering group"],
-  classifier: ["heat source", "installation type"],
-  approval: ["engineer approval required"],
+  code: ["rule id", "category code", "code"],
+  category_name: ["equipment category", "category", "category name"],
+  family: ["equipment family", "family"],
+  engineering_group: ["engineering group", "group"],
+  // Every family names its subtype column differently (Heat Source · Installation Type · Product Type ·
+  // Washing Technology · Ice Type …). Known names are listed here; anything new is caught positionally
+  // in planColumns() — in every workbook so far it is the column immediately after Engineering Group.
+  classifier: ["heat source", "installation type", "product type", "washing technology", "ice type", "equipment subtype"],
+  approval: ["engineer approval required", "engineer approval"],
   status: ["status"],
   version: ["version"],
   commissioning: ["commissioning checklist"],
-  notes: ["engineering notes"],
+  notes: ["engineering notes", "notes"],
 };
 
 /**
@@ -38,14 +49,27 @@ function classifyCell(value) {
   const v = clean(value);
   if (!v) return null;
 
-  if (/^n\s*\/?\s*a$/i.test(v)) return { directive: "not_applicable", detail: null, pending: false };
+  // "Not applicable" is written differently per workbook: Cooking/Refrigeration use "N/A";
+  // Food Preparation uses a bare dash. Both mean the same thing — and a dash must NEVER be
+  // mistaken for a fixed engineering value.
+  if (/^n\s*\/?\s*a$/i.test(v) || /^[-–—]+$/.test(v) || /^not\s+applicable$/i.test(v)) {
+    return { directive: "not_applicable", detail: null, pending: false };
+  }
 
   const ref = /^culinova\s+(.+?)\s+rules?$/i.exec(v);
   if (ref) return { directive: "culinova_rule", detail: ref[1].trim().toLowerCase(), pending: true };
 
-  // calculation directive: explicit, ASHRAE-based, or a "source → source" chain
-  if (/^eos\s+calculation$/i.test(v) || /ashrae/i.test(v) || v.includes("→")) {
+  // A CALCULATION directive is one that actually resolves to a formula we do not yet have — an
+  // explicit "EOS Calculation", or a sourcing chain that falls back to ASHRAE / a calculation.
+  if (/^eos[\s/]+.*calculation/i.test(v) || /ashrae/i.test(v) || /calculation/i.test(v)) {
     return { directive: "calculation", detail: v, pending: true };
+  }
+
+  // A sourcing-PRECEDENCE chain that does NOT end in a calculation — e.g. the "Data Priority" column's
+  // "Manufacturer Datasheet → CULINOVA Standard". This is a data-priority rule, NOT a pending formula:
+  // counting it as pending would falsely tell the client we are waiting on a rule table for it.
+  if (v.includes("→")) {
+    return { directive: "manufacturer", detail: v, pending: false };
   }
 
   if (/^manufacturer/i.test(v)) {
@@ -84,6 +108,18 @@ function planColumns(headers) {
       if (names.includes(lower)) { identityIndex[key] = i; identityCols.add(i); }
     }
   });
+
+  // Positional fallback for the SUBTYPE column. Every family workbook delivered so far places it
+  // immediately after "Engineering Group" but names it differently. If no known alias matched, adopt
+  // that column so a new equipment family imports without a code change — the whole point of this
+  // pipeline. We only do this when the column is not already claimed by another identity field.
+  if (identityIndex.classifier == null && identityIndex.engineering_group != null) {
+    const next = identityIndex.engineering_group + 1;
+    if (next < headers.length && headers[next] && !identityCols.has(next)) {
+      identityIndex.classifier = next;
+      identityCols.add(next);
+    }
+  }
   return { identityIndex, identityCols };
 }
 

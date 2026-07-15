@@ -1,6 +1,6 @@
 const express = require("express");
 const { env } = require("../config/env");
-const { openai: client } = require("../config/openai");
+const { getOpenAI } = require("../config/openai");
 const { supabase } = require("../config/supabase");
 const { getEntryDetail } = require("../utils/detail");
 const auth = require("../services/auth");
@@ -80,7 +80,7 @@ function buildContext(d) {
 async function answer(entryId, question) {
   const d = await getEntryDetail(entryId);
   if (!d) throw new Error("Entry not found");
-  const resp = await client.chat.completions.create({
+  const resp = await getOpenAI().chat.completions.create({
     model: env.extractionModel,
     temperature: 0.2,
     messages: [
@@ -167,7 +167,7 @@ router.post("/projects/:id/ask", auth.authRequired, auth.requirePermission("proj
     const data = await schedules.loadProjectData(req.params.id);
     if (!data.items.length) return res.status(409).json({ error: "This project has no equipment yet." });
 
-    const resp = await client.chat.completions.create({
+    const resp = await getOpenAI().chat.completions.create({
       model: env.extractionModel,
       temperature: 0.2,
       messages: [

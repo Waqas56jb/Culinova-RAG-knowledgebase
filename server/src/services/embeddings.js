@@ -1,5 +1,5 @@
 const { env } = require("../config/env");
-const { openai } = require("../config/openai");
+const { getOpenAI } = require("../config/openai");
 
 let chromaCollection = null;
 
@@ -36,7 +36,7 @@ async function getCollection() {
 }
 
 async function embed(text) {
-  const resp = await openai.embeddings.create({
+  const resp = await getOpenAI().embeddings.create({
     model: env.embeddingModel,
     input: text.slice(0, 8000),
   });
