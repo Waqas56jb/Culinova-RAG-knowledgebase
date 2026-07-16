@@ -1,6 +1,7 @@
 import { j } from "@shared/lib/http.js";
+import { eosApiBase } from "@shared/lib/deploy.js";
 
-const API = import.meta.env.VITE_API_BASE || "http://localhost:4400";
+const API = eosApiBase();
 
 // ── auth/session ──────────────────────────────────────────────────────────────
 const store = {
@@ -269,4 +270,9 @@ export const api = {
   },
   standardsForEquipment: (entryId) => f(`/api/standards/for-equipment/${entryId}`),
   linkCategoryProfile: (entryId, profile_id) => jf(`/api/standards/for-equipment/${entryId}/link`, { profile_id }),
+
+  // ── engineering requests inbox (sales handoffs from Custom ERP) ─────────────
+  engineeringRequests: () => f("/api/engineering-requests"),
+  engineeringRequest: (id) => f(`/api/engineering-requests/${id}`),
+  updateEngineeringRequest: (id, body) => jf(`/api/engineering-requests/${id}`, body, "PATCH"),
 };

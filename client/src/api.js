@@ -1,6 +1,7 @@
 import { j } from "@shared/lib/http.js";
+import { eosApiBase } from "@shared/lib/deploy.js";
 
-const API = import.meta.env.VITE_API_BASE || "http://localhost:4400";
+const API = eosApiBase();
 
 export const api = {
   base: API,

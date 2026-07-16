@@ -1,4 +1,5 @@
 require("dotenv").config();
+const { erpApiUrl, eosCorsOrigins, isProd: deployIsProd } = require("../../../shared/lib/deploy.cjs");
 
 const num = (v, d) => {
   const n = parseInt(v, 10);
@@ -23,12 +24,9 @@ const env = {
   chromaUrl: process.env.CHROMA_URL || "http://localhost:8000",
   chromaCollection: process.env.CHROMA_COLLECTION || "ceks_knowledge",
 
-  corsOrigins: (process.env.CORS_ORIGINS || "http://localhost:5173,http://localhost:5174")
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean),
-  // Opt-in: allow any *.vercel.app preview origin. Off by default — prefer explicit CORS_ORIGINS.
-  corsAllowVercelPreviews: bool(process.env.CORS_ALLOW_VERCEL, false),
+  corsOrigins: eosCorsOrigins(),
+  // Opt-in: allow any *.vercel.app preview origin. On by default on Vercel.
+  corsAllowVercelPreviews: bool(process.env.CORS_ALLOW_VERCEL, deployIsProd),
 
   // ── RATE LIMITS (per IP; a speed bump, not a distributed limiter) ───────────
   rateLimitPerMin: num(process.env.RATE_LIMIT_PER_MIN, 300),
@@ -56,6 +54,11 @@ const env = {
   pdfMaxChars: num(process.env.PDF_MAX_CHARS, 60000),
   pageSizeDefault: num(process.env.PAGE_SIZE_DEFAULT, 50),
   pageSizeMax: num(process.env.PAGE_SIZE_MAX, 200),
+
+  // ERP server-to-server integration key for engineering request handoff
+  erpIntegrationKey: process.env.ERP_INTEGRATION_KEY || process.env.ERP_EOS_INTEGRATION_KEY || "",
+  // Custom ERP API — defaults to culinova-backend.vercel.app on Vercel (override with ERP_API_URL)
+  erpApiUrl: erpApiUrl(),
 };
 
 function assertConfig() {

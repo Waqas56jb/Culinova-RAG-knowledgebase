@@ -20,6 +20,8 @@ const dictionaryRoutes = require("./routes/dictionary");
 const recommendationRoutes = require("./routes/recommendations");
 const projectRoutes = require("./routes/projects");
 const drawingRoutes = require("./routes/drawings");
+const erpIntegrationRoutes = require("./routes/erpIntegration");
+const engineeringRequestRoutes = require("./routes/engineeringRequests");
 
 assertConfig();
 
@@ -119,6 +121,8 @@ app.use("/api/admin", adminRoutes); // search/filter/sort/bulk/stats
 app.use("/api", aiLimiter, assistantRoutes); // /api/entries/:id/ask, /summary, /engineering-notes (OpenAI cost)
 app.use("/api", reviewRoutes); // /api/drafts, /api/entries/:id, /api/attributes/:id ...
 app.use("/api/knowledge", knowledgeRoutes); // PUBLIC by design — approved knowledge only
+app.use("/api/integrations/erp", erpIntegrationRoutes); // server-to-server from Custom ERP
+app.use("/api/engineering-requests", engineeringRequestRoutes); // admin inbox for sales handoffs
 
 app.use((req, res) => res.status(404).json({ error: `No route: ${req.method} ${req.path}` }));
 

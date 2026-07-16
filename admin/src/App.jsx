@@ -11,6 +11,7 @@ import Dictionary from "./pages/Dictionary.jsx";
 import Projects from "./pages/Projects.jsx";
 import ProjectWorkspace from "./pages/ProjectWorkspace.jsx";
 import Users from "./pages/Users.jsx";
+import EngineeringInbox from "./pages/EngineeringInbox.jsx";
 
 const TABS = [
   { key: "dashboard", label: "Dashboard", accent: "indigo" },
@@ -20,6 +21,7 @@ const TABS = [
   { key: "standards", label: "Standards", perm: "rule.read", accent: "sky" },
   { key: "dictionary", label: "Dictionary", perm: "rule.read", accent: "violet" },
   { key: "projects", label: "Projects", perm: "project.read", accent: "cyan" },
+  { key: "engineering", label: "Eng. Inbox", perm: "project.read", accent: "teal" },
   { key: "users", label: "Users", perm: "user.manage", accent: "rose" },
 ];
 
@@ -27,6 +29,7 @@ function tabActive(view, key) {
   if (view.name === key) return true;
   if (view.name === "review" && key === "drafts") return true;
   if (view.name === "project" && key === "projects") return true;
+  if (view.name === "engineering" && key === "engineering") return true;
   return false;
 }
 
@@ -92,6 +95,7 @@ export default function App() {
         {view.name === "dictionary" && <Dictionary />}
         {view.name === "projects" && <Projects onOpen={(id) => setView({ name: "project", id })} />}
         {view.name === "project" && <ProjectWorkspace id={view.id} onBack={() => setView({ name: "projects" })} />}
+        {view.name === "engineering" && <EngineeringInbox />}
         {view.name === "users" && <Users />}
       </main>
     </div>
