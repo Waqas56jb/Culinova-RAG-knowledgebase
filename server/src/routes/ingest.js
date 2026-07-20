@@ -8,7 +8,9 @@ const { extractFromPages } = require("../services/extraction");
 const { uploadPdf, uploadBuffer } = require("../services/storage");
 const { ingestModelFiles } = require("../services/ingestModel");
 const { extractMainImage } = require("../services/pdfImage");
+const XLSX = require("xlsx");
 const { importWorkbook, buildTemplateBuffer } = require("../services/excelImport");
+const productCatalog = require("../services/productCatalogImport");
 const { persistDraft } = require("../utils/draft");
 const auth = require("../services/auth");
 const dictSvc = require("../services/params");
@@ -216,18 +218,52 @@ router.get("/excel-template", auth.authRequired, (req, res) => {
   }
 });
 
-/** POST /api/ingest/excel  (multipart: file) — generalized Excel bulk import (one Draft per row) */
+/**
+ * POST /api/ingest/excel  (multipart: file) — Excel bulk import (one Draft per row).
+ *
+ * The user should not have to know which importer their file needs, so the format is DETECTED:
+ *   • the EOS import template  → the template importer
+ *   • any other product sheet  → the generic product-catalogue importer, which maps columns through
+ *     the Parameter Dictionary + Disciplines and records utilities explicitly marked "N/A" so those
+ *     sections are hidden for the item (a work table has no electrical/water/gas).
+ * Uploading the same file through the UI and the CLI now produces IDENTICAL results — previously the
+ * two paths disagreed on the brand column and created duplicate entries for the same products.
+ */
 router.post("/excel", canIngest, upload.single("file"), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: "No Excel file uploaded." });
-    const r = await importWorkbook(req.file.buffer, { log: () => {} });
-    for (const row of r.results || []) {
-      if (row.ok && row.entry_id) await autoApplyRules(row.entry_id, req.user);
+    const wb = XLSX.read(req.file.buffer, { type: "buffer" });
+    const headers = (XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: null, blankrows: false })[0] || [])
+      .map((h) => String(h ?? "").trim().toLowerCase());
+
+    // The EOS template is identified by its own signature columns; anything else is a generic sheet.
+    const isEosTemplate = headers.includes("brand*") && headers.includes("equipment type*");
+
+    if (isEosTemplate) {
+      const r = await importWorkbook(req.file.buffer, { log: () => {} });
+      for (const row of r.results || []) {
+        if (row.ok && row.entry_id) await autoApplyRules(row.entry_id, req.user);
+      }
+      return res.json({ ok: true, format: "eos_template", ...r });
     }
-    res.json({ ok: true, ...r });
+
+    const r = await productCatalog.importWorkbook(wb, {
+      source_file: req.file.originalname,
+      actor: req.user,
+    });
+    res.json({
+      ok: true,
+      format: "product_catalogue",
+      imported: r.imported,
+      skipped: r.skipped,
+      products: r.products,
+      attributes: r.attributes,
+      not_applicable: r.not_applicable_tally,
+      errors: r.errors,
+    });
   } catch (err) {
     console.error("[ingest/excel]", err);
-    res.status(500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: err.message || "Excel import failed." });
   }
 });
 
