@@ -106,7 +106,7 @@ router.post("/pdf", canIngest, upload.array("files", 10), async (req, res) => {
         .single();
       if (doc.error) throw new Error(doc.error.message);
 
-      const extracted = await extractFromPages(pages, label);
+      const extracted = await extractFromPages(pages, label, file.originalname);
       await supabase.from("ceks_import_documents").update({ status: "extracted" }).eq("id", doc.data.id);
 
       results.push({ docId: doc.data.id, label, docType, buffer: file.buffer, result: extracted });
@@ -125,6 +125,9 @@ router.post("/pdf", canIngest, upload.array("files", 10), async (req, res) => {
     }
 
     const model = mergeModel(results);
+    // carry the first document's real file name so, if the model number could not be extracted, the
+    // fallback uses the uploaded file's own name instead of a fabricated one.
+    model.source_file = req.files[0]?.originalname || null;
     const draft = await persistDraft({ model, attributes, notes, origin: "ai_pdf" });
 
     // link the uploaded documents to the entry (so they appear under Related Documents)
@@ -292,6 +295,13 @@ router.post("/image/:entryId", canEdit, upload.single("image"), async (req, res)
 router.post("/manual", canIngest, express.json({ limit: "2mb" }), async (req, res) => {
   try {
     const { model = {}, attributes = [], notes = [] } = req.body || {};
+    // Manual entry is a human typing the profile — the model number (or at least a display name) must
+    // be given. Refuse rather than accept a blank identity, so we never quietly create an
+    // "UNIDENTIFIED" record from a manual form.
+    const hasIdentity = String(model.model_number || "").trim() || String(model.display_name || "").trim();
+    if (!hasIdentity) {
+      return res.status(422).json({ error: "A model number (or a display name) is required for manual entry." });
+    }
     const draft = await persistDraft({ model, attributes, notes, origin: "manual" });
     const engine = await autoApplyRules(draft.entry_id, req.user);
     res.json({ ok: true, draft, engine });

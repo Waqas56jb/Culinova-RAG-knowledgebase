@@ -115,7 +115,7 @@ const SYSTEM_PROMPT =
  * @param {string} docLabel friendly document label e.g. "Datasheet"
  * @returns {Promise<{model, attributes, notes}>}
  */
-async function extractFromPages(pages, docLabel) {
+async function extractFromPages(pages, docLabel, sourceFileName = "") {
   const tagged = buildTaggedText(pages);
   if (!String(tagged || "").replace(/=== PAGE \d+ ===/g, "").trim()) {
     throw Object.assign(
@@ -123,8 +123,17 @@ async function extractFromPages(pages, docLabel) {
       { status: 422 },
     );
   }
+  // The file name is a strong, legitimate signal — manufacturers routinely name a datasheet after the
+  // model (e.g. "PL30.pdf"). We give it to the model as a HINT, not an instruction: it may only be
+  // used when the document text supports it, and must never override a model number the text states.
+  const fileHint = sourceFileName
+    ? `Source file name: "${sourceFileName}". Manufacturers often name the file after the model number, ` +
+      `so this is a useful hint for model_number — but use it only if the document text is consistent ` +
+      `with it, and never in place of a model number actually printed in the document.\n\n`
+    : "";
   const userContent =
     `Document type: ${docLabel}\n` +
+    fileHint +
     `Extract all engineering knowledge from the following page-tagged text.\n\n` +
     tagged;
 

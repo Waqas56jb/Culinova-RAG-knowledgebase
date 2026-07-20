@@ -86,7 +86,7 @@ async function ingestModelFiles({ modelPath, files, log = () => {} }) {
   const results = [];
   for (const c of extractSources) {
     const { pages, numpages } = await extractPages(c.buffer);
-    const r = await extractFromPages(pages, c.label);
+    const r = await extractFromPages(pages, c.label, c.file || c.name);
     results.push({ c, r, buf: c.buffer, numpages });
     log(`  extracted ${c.label}: ${r.attributes.length} fields (${numpages}p)`);
   }
@@ -124,6 +124,8 @@ async function ingestModelFiles({ modelPath, files, log = () => {} }) {
     power_type: ai.power_type,
     display_name: ai.display_name,
     description: ai.description,
+    // folder name is the human-given identity; use it as the fallback so nothing is ever fabricated
+    source_file: modelPath || (extractSources[0] && (extractSources[0].file || extractSources[0].name)) || null,
   };
 
   const draft = await persistDraft({ model, attributes, notes, origin: "ai_pdf" });

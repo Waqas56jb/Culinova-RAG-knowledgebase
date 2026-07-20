@@ -1,3 +1,4 @@
+const crypto = require("crypto");
 const { supabase } = require("../config/supabase");
 
 function slug(text, fallback = "ITEM") {
@@ -50,8 +51,43 @@ async function findOrCreateBrand(typeId, name) {
   return row;
 }
 
-async function findOrCreateModel(brandId, modelNumber, extra = {}) {
-  const clean = modelNumber || "MODEL-" + Date.now().toString().slice(-5);
+/**
+ * Turn a source file name into a readable identifier when nothing better is known.
+ * "PL30 Datasheet.pdf" → "PL30 Datasheet". This is REAL data (the file the user uploaded), not an
+ * invented value, so it is safe to show — the reviewer recognises their own file and can correct it.
+ */
+function stemFromFileName(name) {
+  if (!name) return "";
+  const base = String(name).replace(/\\/g, "/").split("/").pop() || "";
+  return base.replace(/\.[a-z0-9]+$/i, "").replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
+}
+
+/**
+ * Decide the model identifier WITHOUT ever fabricating one.
+ *
+ * The old code generated "MODEL-" + a slice of the current timestamp when extraction returned no
+ * model number. That fake value (e.g. "MODEL-70988") looked exactly like a real manufacturer model
+ * and reached the reviewer as if it had come from the document — which is precisely what confused
+ * the client ("I don't know from where this name"). It is gone.
+ *
+ * Instead we fall back only to things that are REAL: the extracted number, the display name, or the
+ * uploaded file's own name. Only when none of those exist do we use an explicit, honest
+ * "UNIDENTIFIED-xxxx" marker — which reads as "a human must set this", not as a genuine model, and
+ * carries a short unique suffix so two unidentified uploads never collapse into one model.
+ */
+function resolveModelIdentifier({ model_number, display_name, source_file }, brandId) {
+  const clean = (v) => (v == null ? "" : String(v).trim());
+  if (clean(model_number)) return { value: clean(model_number), identified: true };
+  if (clean(display_name)) return { value: clean(display_name), identified: false };
+  const fromFile = stemFromFileName(source_file);
+  if (fromFile) return { value: fromFile, identified: false };
+  // last resort — explicitly unidentified, unique so it cannot merge with another unknown item
+  const suffix = crypto.randomUUID().slice(0, 4).toUpperCase();
+  return { value: `UNIDENTIFIED-${suffix}`, identified: false };
+}
+
+async function findOrCreateModel(brandId, modelIdentifier, extra = {}) {
+  const clean = modelIdentifier;
   const existing = await first(
     supabase.from("ceks_models").select("*").eq("brand_id", brandId).ilike("model_number", clean)
   );
@@ -71,7 +107,13 @@ async function persistDraft({ model = {}, attributes = [], notes = [], origin = 
   const category = await findOrCreateCategory(model.category);
   const type = await findOrCreateType(category.id, model.equipment_type);
   const brand = await findOrCreateBrand(type.id, model.brand);
-  const modelRow = await findOrCreateModel(brand.id, model.model_number, {
+  // Never fabricate a model number. resolveModelIdentifier only ever returns real data (the
+  // extracted number, the display name, or the source file name), or an explicit UNIDENTIFIED marker.
+  const identifier = resolveModelIdentifier(
+    { model_number: model.model_number, display_name: model.display_name, source_file: model.source_file },
+    brand.id,
+  );
+  const modelRow = await findOrCreateModel(brand.id, identifier.value, {
     display_name: model.display_name || null,
     description: model.description || null,
     series: model.series || null,
