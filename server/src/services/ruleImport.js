@@ -76,6 +76,13 @@ async function planColumns(headers, dict) {
       continue;
     }
 
+    // Photo / image columns are reference assets, not rule inputs/outputs — ignore generically
+    // so SOCKET PHOTO / ISOLATOR SWITCH PHOTO never block an otherwise valid Electrical table.
+    if (/\b(photo|image|picture|img)\b/i.test(header)) {
+      plan.push({ index: i, header, kind: "ignore" });
+      continue;
+    }
+
     const { base, bound, unit } = splitHeader(header);
     const param = dictSvc.resolveParameter(dict, base) || dictSvc.resolveParameter(dict, header);
 
@@ -148,7 +155,16 @@ async function planColumns(headers, dict) {
 
 const numOrNull = (v) => {
   if (v == null || v === "") return null;
-  const n = Number(String(v).replace(",", "."));
+  if (typeof v === "number") return Number.isFinite(v) ? v : null;
+  // Real manufacturer / rule sheets often write "60Hz", "230 V", "16A", "3×4 MM²" — extract the
+  // leading numeric token. Never invent a value if none is present.
+  const s = String(v).trim().replace(",", ".");
+  if (!s) return null;
+  const direct = Number(s);
+  if (Number.isFinite(direct)) return direct;
+  const m = /^([+-]?\d+(?:\.\d+)?)/.exec(s);
+  if (!m) return null;
+  const n = Number(m[1]);
   return Number.isFinite(n) ? n : null;
 };
 

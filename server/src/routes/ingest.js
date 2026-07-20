@@ -145,7 +145,8 @@ router.post("/pdf", canIngest, upload.array("files", 10), async (req, res) => {
     res.json({ ok: true, draft, engine, documents: results.map((r) => ({ id: r.docId, label: r.label })) });
   } catch (err) {
     console.error("[ingest/pdf]", err);
-    res.status(500).json({ error: err.message });
+    const status = err.status || 500;
+    res.status(status).json({ error: err.message || "PDF extraction failed." });
   }
 });
 
@@ -178,14 +179,27 @@ router.post("/folder", canIngest, upload.array("files", 400), async (req, res) =
         await autoApplyRules(r.entry_id, req.user);
         models.push({ ok: true, entry_id: r.entry_id, title: r.title, counts: r.counts, versioned: r.versioned });
       } catch (e) {
-        models.push({ ok: false, folder: dir, error: e.message });
+        models.push({ ok: false, folder: dir, error: e.message, status: e.status || 500 });
       }
     }
 
-    res.json({ ok: true, models });
+    if (!models.length) {
+      return res.status(422).json({ ok: false, error: "No model folders with PDFs were found in the upload.", models: [] });
+    }
+    const failed = models.filter((m) => !m.ok);
+    if (failed.length === models.length) {
+      const status = failed[0].status || 502;
+      return res.status(status).json({
+        ok: false,
+        error: failed[0].error || "Folder extraction failed for every model.",
+        models,
+      });
+    }
+
+    res.json({ ok: true, models, failed: failed.length });
   } catch (err) {
     console.error("[ingest/folder]", err);
-    res.status(500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: err.message });
   }
 });
 
@@ -247,7 +261,7 @@ router.post("/manual", canIngest, express.json({ limit: "2mb" }), async (req, re
     res.json({ ok: true, draft, engine });
   } catch (err) {
     console.error("[ingest/manual]", err);
-    res.status(500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: err.message });
   }
 });
 

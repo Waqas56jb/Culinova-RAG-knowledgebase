@@ -117,20 +117,60 @@ const SYSTEM_PROMPT =
  */
 async function extractFromPages(pages, docLabel) {
   const tagged = buildTaggedText(pages);
+  if (!String(tagged || "").replace(/=== PAGE \d+ ===/g, "").trim()) {
+    throw Object.assign(
+      new Error("This PDF has no extractable text (it may be a scanned image). OCR is not enabled — use a text datasheet, Excel import, or manual entry."),
+      { status: 422 },
+    );
+  }
   const userContent =
     `Document type: ${docLabel}\n` +
     `Extract all engineering knowledge from the following page-tagged text.\n\n` +
     tagged;
 
-  const resp = await getOpenAI().chat.completions.create({
-    model: env.extractionModel,
-    temperature: 0,
-    response_format: { type: "json_schema", json_schema: EXTRACTION_SCHEMA },
-    messages: [
-      { role: "system", content: SYSTEM_PROMPT },
-      { role: "user", content: userContent },
-    ],
-  });
+  let resp;
+  try {
+    resp = await getOpenAI().chat.completions.create({
+      model: env.extractionModel,
+      temperature: 0,
+      response_format: { type: "json_schema", json_schema: EXTRACTION_SCHEMA },
+      messages: [
+        { role: "system", content: SYSTEM_PROMPT },
+        { role: "user", content: userContent },
+      ],
+    });
+  } catch (err) {
+    const msg = err?.message || String(err);
+    const status = err?.status || err?.statusCode;
+    const code = err?.code || err?.error?.code;
+
+    // ALWAYS log the original error. Mapping it to a friendly message must never destroy the root
+    // cause — a masked error made a plain rate-limit look like a billing problem and cost real
+    // debugging time. This line is what makes the true failure visible in the server log.
+    console.error(`[extraction] OpenAI call failed — status=${status} code=${code} model=${env.extractionModel}: ${msg}`);
+
+    // A genuine BILLING problem: the account is out of credit. Permanent until topped up.
+    if (code === "insufficient_quota" || /insufficient_quota|billing|exceeded your current quota/i.test(msg)) {
+      throw Object.assign(
+        new Error(
+          "OpenAI quota exceeded. AI PDF/folder extraction needs billing credits on the OpenAI account. Excel bulk and manual entry still work without AI.",
+        ),
+        { status: 402 },
+      );
+    }
+    // A 429 that is NOT insufficient_quota is a TRANSIENT rate limit (requests/tokens per minute).
+    // Telling the user to buy credits here would be wrong — they simply need to retry shortly.
+    if (status === 429) {
+      throw Object.assign(
+        new Error("OpenAI is rate-limiting this account right now. Wait a moment and retry — this is temporary, not a billing problem."),
+        { status: 429 },
+      );
+    }
+    if (status === 401 || /incorrect api key|invalid api key/i.test(msg)) {
+      throw Object.assign(new Error("OpenAI API key is invalid. Check OPENAI_API_KEY in server/.env."), { status: 503 });
+    }
+    throw Object.assign(new Error(msg), { status: status && status < 500 ? status : 502 });
+  }
 
   const raw = resp.choices[0]?.message?.content || "{}";
   const parsed = JSON.parse(raw);
