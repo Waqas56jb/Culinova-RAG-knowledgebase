@@ -1,5 +1,6 @@
 const { supabase } = require("../config/supabase");
 const cat = require("../services/categoryProfiles");
+const applicability = require("../services/applicability");
 
 const RECS_SELECT =
   "id, parameter_id, value_text, value_num, unit, final_value, final_unit, status, rule_code, rule_version, manufacturer_value, manufacturer_unit, decided_at, ceks_parameters(key,label), ceks_disciplines(code,name)";
@@ -90,7 +91,18 @@ async function getEntryDetail(entryId) {
   let category_standard = null;
   try { category_standard = await cat.forEntry(entry); } catch (e) { console.warn(`[detail] category standard resolve failed for ${entryId}: ${e.message}`); }
 
-  return { entry, version, model, attributes, notes, documents, files: filesRes.data || [], recommendations, category_standard };
+  // Which technical sections actually apply to THIS item — so the UI can hide the ones that never
+  // will (a work table has no electrical/water/gas) instead of rendering them empty or "Missing".
+  let sections = null;
+  if (versionId) {
+    try {
+      sections = await applicability.forVersion(versionId, { entry, attributes });
+    } catch (e) {
+      console.warn(`[detail] applicability failed for ${entryId}: ${e.message}`);
+    }
+  }
+
+  return { entry, version, model, attributes, notes, documents, files: filesRes.data || [], recommendations, category_standard, sections };
 }
 
 module.exports = { getEntryDetail };

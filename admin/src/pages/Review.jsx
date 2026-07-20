@@ -116,7 +116,9 @@ export default function Review({ id, onBack }) {
 
       {actionErr && <div className="alert" role="alert">{actionErr}</div>}
 
-      {planSections(groups).map(({ key, label, rows }) => (
+      {/* d.sections tells us which technical sections actually apply to THIS item, so utilities a
+          work table will never have (electrical / water / gas) are hidden rather than shown empty. */}
+      {planSections(groups, d.sections).map(({ key, label, rows }) => (
         <SectionTable
           key={key} sectionKey={key} label={label} rows={rows}
           saveAttr={saveAttr} removeAttr={(a) => setModal({ type: "delete-attr", attr: a })} addAttr={addAttr} uploadPhoto={uploadPhoto}

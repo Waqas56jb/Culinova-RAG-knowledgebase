@@ -188,7 +188,8 @@ function Detail({ id, onBack }) {
       <EquipmentProfile d={d} />
 
 
-      {planSections(groups).map(({ key, label, rows }) => {
+      {/* only the technical sections that actually apply to this item are rendered */}
+      {planSections(groups, d.sections).map(({ key, label, rows }) => {
         const outRows = buildSectionRows(key, rows);
         return (
         <section key={key} className="rec-group">

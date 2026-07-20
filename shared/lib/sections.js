@@ -95,13 +95,45 @@ export function buildSectionRows(sectionKey, rows) {
 // hidden from the user.
 //   groups: { [attr_group]: attribute[] }
 //   → [{ key, label, rows, known }]
-export function planSections(groups) {
+/**
+ * Which attribute groups must be hidden for this item?
+ *
+ * The API tells us, per DISCIPLINE, whether it applies (a work table has no electrical/water/gas).
+ * Sections here are keyed by attr_group, and one group can belong to several disciplines
+ * (`connection_point` is both Plumbing and Installation). So a group is only hidden when EVERY
+ * discipline that owns it is not applicable — otherwise a still-relevant section would disappear.
+ *
+ *   applicability: the `sections` object returned by /api/entries/:id
+ */
+export function hiddenGroupsFrom(applicability) {
+  const list = applicability?.sections;
+  if (!Array.isArray(list) || !list.length) return new Set(); // no info → hide nothing
+  const owners = new Map(); // attr_group → { total, notApplicable }
+  for (const s of list) {
+    for (const g of s.attr_groups || []) {
+      if (!owners.has(g)) owners.set(g, { total: 0, na: 0 });
+      const o = owners.get(g);
+      o.total++;
+      if (s.state === "not_applicable") o.na++;
+    }
+  }
+  const hidden = new Set();
+  for (const [g, o] of owners) if (o.total > 0 && o.na === o.total) hidden.add(g);
+  return hidden;
+}
+
+export function planSections(groups, applicability) {
   const g = groups || {};
   const knownKeys = new Set(SECTIONS.map(([k]) => k));
+  const hidden = hiddenGroupsFrom(applicability);
   const plan = [];
 
   for (const [key, label] of SECTIONS) {
     const rows = g[key] || [];
+    // A section that does not apply to this equipment is hidden ENTIRELY — not rendered empty and
+    // never shown as "Missing". Missing means "expected but absent"; this is "will never exist".
+    // Real data always wins: if the item somehow has values here, we still show them.
+    if (hidden.has(key) && !rows.length) continue;
     if ((REQUIRED_FIELDS[key] || []).length > 0 || rows.length) {
       plan.push({ key, label, rows, known: true });
     }
