@@ -259,4 +259,8 @@ async function updateEntryIdentity(entryId, id) {
   return { title, category: category.name, brand: brand.name, equipment_type: type.name };
 }
 
-module.exports = { persistDraft, updateEntryIdentity, slug };
+module.exports = {
+  persistDraft, updateEntryIdentity, slug,
+  // exported so a bulk importer can resolve the same taxonomy without duplicating this logic
+  findOrCreateCategory, findOrCreateType, findOrCreateBrand,
+};

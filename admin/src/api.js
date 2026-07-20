@@ -122,6 +122,20 @@ export const api = {
     return f(`/api/ingest/folder`, { method: "POST", body: fd });
   },
   uploadExcel: (file) => { const fd = new FormData(); fd.append("file", file); return f(`/api/ingest/excel`, { method: "POST", body: fd }); },
+
+  // ── batched import jobs — a large sheet that can never time out ─────────────
+  // The client drives the run one small batch at a time, so no single request is
+  // ever long enough to hit a serverless limit, and progress is real, not faked.
+  importPrepare: (file, sheet) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    if (sheet) fd.append("sheet", sheet);
+    return f(`/api/import-jobs/prepare`, { method: "POST", body: fd });
+  },
+  importBatch: (jobId, size) => jf(`/api/import-jobs/${jobId}/batch`, { size }),
+  importStatus: (jobId) => f(`/api/import-jobs/${jobId}`),
+  importPreview: (jobId, limit = 25) => f(`/api/import-jobs/${jobId}/preview?limit=${limit}`),
+  importCancel: (jobId) => jf(`/api/import-jobs/${jobId}/cancel`),
   downloadExcelTemplate: () => download(`/api/ingest/excel-template`),
   uploadManual: (payload) => jf(`/api/ingest/manual`, payload),
   uploadImage: (entryId, file) => { const fd = new FormData(); fd.append("image", file); return f(`/api/ingest/image/${entryId}`, { method: "POST", body: fd }); },

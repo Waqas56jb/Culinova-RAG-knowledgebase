@@ -2,6 +2,7 @@ import React, { useState, useMemo } from "react";
 import { api } from "../api.js";
 import { Btn } from "../components/Loader.jsx";
 import { PageHero, PagePanel } from "../components/PageShell.jsx";
+import BatchImport from "../components/BatchImport.jsx";
 
 const DOC_TYPES = [
   ["datasheet", "Datasheet"],
@@ -49,7 +50,7 @@ export default function Upload({ onDone }) {
         <button className={mode === "manual" ? "mtab active" : "mtab"} onClick={() => setMode("manual")}>Manual Entry</button>
       </div>
       {mode === "folder" && <FolderUpload onDone={onDone} />}
-      {mode === "excel" && <ExcelUpload />}
+      {mode === "excel" && <BatchImport />}
       {mode === "files" && <SingleUpload onDone={onDone} />}
       {mode === "manual" && <ManualUpload onDone={onDone} />}
     </PagePanel>
@@ -233,54 +234,6 @@ function FolderUpload({ onDone }) {
         </Btn>
       </div>
       {busy && <p className="muted">AI is reading each document, extracting the product image, and building the profiles…</p>}
-    </div>
-  );
-}
-
-/* ---------------- Excel bulk import ---------------- */
-function ExcelUpload() {
-  const [file, setFile] = useState(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  const [result, setResult] = useState(null);
-  const [drag, setDrag] = useState(false);
-
-  function take(f) { if (f) { setFile(f); setResult(null); setError(""); } }
-  async function submit() {
-    if (!file) return;
-    setBusy(true); setError(""); setResult(null);
-    try { setResult(await api.uploadExcel(file)); } catch (e) { setError(e.message); } finally { setBusy(false); }
-  }
-
-  return (
-    <div>
-      <p className="muted">Upload a standardized Excel sheet (one product per row). The system reads your columns, maps them to
-        Equipment Profiles, and creates a <strong>Draft per row</strong>. Rows without a product code are skipped.</p>
-      <div className="template-banner">
-        <div>
-          <strong>Use the standardized EOS template</strong>
-          <div className="muted">All required fields, engineering sections, plus <em>Image URL</em>, <em>Drawing / CAD Link</em> and <em>PDF Link</em> columns for your custom items — pre-filled with one example row. Fill it in and upload for a perfect auto-import.</div>
-        </div>
-        <a className="btn" href={api.excelTemplateUrl} download>⬇ Download Template</a>
-      </div>
-      <label className={"dropzone" + (drag ? " drag" : "")}
-        onDragOver={(e) => { e.preventDefault(); setDrag(true); }} onDragLeave={() => setDrag(false)}
-        onDrop={(e) => { e.preventDefault(); setDrag(false); take((e.dataTransfer.files || [])[0]); }}>
-        <input type="file" accept=".xlsx,.xls" hidden onChange={(e) => take((e.target.files || [])[0])} />
-        <div><strong>{file ? file.name : "Drag & drop an .xlsx file, or click to choose"}</strong>
-          <div className="muted">Bulk product/equipment sheet.</div></div>
-      </label>
-      {error && <div className="alert">{error}</div>}
-      {result && (
-        <div className="results">
-          <h2>Imported {result.imported} of {result.total} rows{result.skipped ? ` (${result.skipped} skipped — no product code)` : ""}</h2>
-          {result.results.filter((r) => r.ok).slice(0, 8).map((r, i) => (
-            <div key={i} className="result-row"><span className="badge approved">Draft</span><span>{r.title}</span><span className="muted"> — {r.fields} fields</span></div>
-          ))}
-          {result.imported > 8 && <div className="muted">…and {result.imported - 8} more.</div>}
-        </div>
-      )}
-      <div className="actions"><Btn className="primary" loading={busy} disabled={!file} onClick={submit}>Import Excel</Btn></div>
     </div>
   );
 }

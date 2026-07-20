@@ -208,4 +208,11 @@ async function importWorkbook(wb, { sheet = null, source_file = null, actor = nu
   return report;
 }
 
-module.exports = { preview, importWorkbook, planColumns, rowToProduct, readSheet };
+/** The data planColumns() needs (dictionary + disciplines). Shared with the batched import job. */
+async function loadPlanContext() {
+  const dict = await dictSvc.load(true);
+  const { data: disciplines } = await supabase.from("ceks_disciplines").select("code,name,attr_groups").order("sort_order");
+  return { dict, disciplines: disciplines || [] };
+}
+
+module.exports = { preview, importWorkbook, planColumns, rowToProduct, readSheet, loadPlanContext };

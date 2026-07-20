@@ -9,6 +9,7 @@ const { env, assertConfig } = require("./config/env");
 const auth = require("./services/auth");
 const { supabase } = require("./config/supabase");
 const ingestRoutes = require("./routes/ingest");
+const importJobRoutes = require("./routes/importJobs");
 const reviewRoutes = require("./routes/review");
 const knowledgeRoutes = require("./routes/knowledge");
 const adminRoutes = require("./routes/admin");
@@ -117,6 +118,7 @@ app.use("/api/drawings", drawingRoutes);
 
 // ── knowledge management (guarded per-route) ─────────────────────────────────
 app.use("/api/ingest", writeLimiter, ingestRoutes);
+app.use("/api/import-jobs", writeLimiter, importJobRoutes);
 app.use("/api/admin", adminRoutes); // search/filter/sort/bulk/stats
 app.use("/api", aiLimiter, assistantRoutes); // /api/entries/:id/ask, /summary, /engineering-notes (OpenAI cost)
 app.use("/api", reviewRoutes); // /api/drafts, /api/entries/:id, /api/attributes/:id ...
