@@ -143,6 +143,22 @@ export default function EngineeringInbox() {
           <p className="muted" style={{ marginBottom: 8 }}><b>BOQ text</b> (free-form requirements from sales)</p>
           <textarea rows={3} value={form.boq_text} disabled={!canManage} onChange={(e) => setForm({ ...form, boq_text: e.target.value })} style={{ width: "100%", marginBottom: 12 }} />
 
+          {(detail.attachments || []).length > 0 && (
+            <div style={{ marginBottom: 12 }}>
+              <p className="muted" style={{ marginBottom: 6 }}><b>Attachments from Sales</b> — BOQ, drawings, client specs, site photos, layouts</p>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                {detail.attachments.map((a, i) => (
+                  <a key={i} href={a.url || undefined} target="_blank" rel="noreferrer"
+                    style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 10px", borderRadius: 8, border: "1px solid var(--line)", background: "#fff", fontSize: 12, textDecoration: "none", color: a.url ? "var(--ink)" : "var(--steel)", pointerEvents: a.url ? "auto" : "none" }}>
+                    <span style={{ background: "var(--brand-soft, #e6f8f6)", color: "var(--brand-deep, #0f5f5a)", borderRadius: 4, padding: "1px 6px", fontSize: 10, fontWeight: 700 }}>{a.category || "File"}</span>
+                    <span>{a.name}</span>
+                    {a.url ? <span style={{ color: "var(--brand, #0d9488)" }}>↗</span> : <span className="muted" style={{ fontSize: 10 }}>(link expired — reopen)</span>}
+                  </a>
+                ))}
+              </div>
+            </div>
+          )}
+
           <p className="muted" style={{ marginBottom: 8 }}><b>Approved equipment lines</b> — pick from the EOS Library; brand, name and model are filled from the approved record (no manual entry).</p>
           <div className="scroll-x">
             <table className="grid">

@@ -47,6 +47,7 @@ router.post("/engineering-requests", async (req, res) => {
       project_type: p.project_type || null,
       project_location: p.project_location || null,
       drawings: p.drawings || [],
+      attachments: Array.isArray(p.attachments) ? p.attachments : [],
       boq_text: p.boq_text || null,
       sales_notes: p.sales_notes || null,
       required_date: p.required_date || null,
