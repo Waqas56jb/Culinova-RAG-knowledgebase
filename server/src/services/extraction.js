@@ -137,38 +137,129 @@ async function extractFromPages(pages, docLabel, sourceFileName = "") {
     `Extract all engineering knowledge from the following page-tagged text.\n\n` +
     tagged;
 
-  let resp;
+  const resp = await callOpenAI([
+    { role: "system", content: SYSTEM_PROMPT },
+    { role: "user", content: userContent },
+  ]);
+  return parseExtraction(resp);
+}
+
+/**
+ * VISION extraction — read the datasheet as a PERSON would, from the rendered page images.
+ *
+ * Text extraction fails on drawings and scanned sheets (the model number is drawn, not typed). When
+ * that happens we rasterise the pages and hand the images to the same vision-capable model with the
+ * same schema. This is the "use your eyes" path that recovers a model like "PL30" printed only in a
+ * graphic header.
+ *
+ * @param {Buffer[]} pageImages  PNG buffers, one per page
+ */
+async function extractFromImages(pageImages, docLabel, sourceFileName = "") {
+  if (!pageImages || !pageImages.length) {
+    throw Object.assign(new Error("No page images to read."), { status: 422 });
+  }
+  const fileHint = sourceFileName
+    ? `The source file is named "${sourceFileName}". Manufacturers often name a file after the model, ` +
+      `but rely on what you can READ in the image; never contradict the printed text.\n`
+    : "";
+  const content = [
+    {
+      type: "text",
+      text:
+        `Document type: ${docLabel}. This document has little or no machine-readable text — it is a ` +
+        `technical drawing or scanned datasheet. READ THE IMAGES like an engineer: the brand, model ` +
+        `number and specifications are printed in headers, title blocks and callouts. Extract every ` +
+        `value you can actually see, following the schema. ${fileHint}` +
+        `The model_number is usually the most prominent code near the product name or in the header.`,
+    },
+    ...pageImages.map((buf) => ({
+      type: "image_url",
+      image_url: { url: `data:image/png;base64,${buf.toString("base64")}`, detail: "high" },
+    })),
+  ];
+
+  const resp = await callOpenAI([
+    { role: "system", content: SYSTEM_PROMPT },
+    { role: "user", content },
+  ]);
+  return parseExtraction(resp);
+}
+
+/**
+ * Read a PDF end to end, choosing the right tool automatically.
+ *
+ * Text first (fast, cheap). When the page text is too thin to be a real datasheet, OR the text pass
+ * could not find a model number, escalate to VISION on the rendered pages — so a drawing-only sheet
+ * is read by its images instead of silently producing a blank identity. Never fabricates: if nothing
+ * can be read, it returns whatever was found (possibly an empty model) for the reviewer to complete.
+ *
+ * @param {Buffer} pdfBuffer  the raw PDF
+ */
+async function extractFromPdf(pdfBuffer, docLabel, sourceFileName = "") {
+  const { extractPages } = require("./pdf");
+  const { renderPages } = require("./pdfImage");
+
+  let pages = [];
+  try { ({ pages } = await extractPages(pdfBuffer)); } catch { pages = []; }
+  const textLen = String((pages || []).join(" ")).replace(/\s+/g, "").length;
+
+  // Enough real text to trust the fast path? (dimension-only sheets fall well below this.)
+  const THIN_TEXT = 400;
+  if (textLen >= THIN_TEXT) {
+    const fromText = await extractFromPages(pages, docLabel, sourceFileName);
+    if (String(fromText?.model?.model_number || "").trim()) return fromText;
+    // text was rich but the identity is missing — the model is probably in a graphic; let vision try
+    try {
+      const images = await renderPages(pdfBuffer);
+      const fromVision = await extractFromImages(images, docLabel, sourceFileName);
+      // keep the richer text attributes, but take the model identity vision could read
+      return mergeExtractions(fromText, fromVision);
+    } catch (e) {
+      console.warn(`[extraction] vision escalation skipped: ${e.message}`);
+      return fromText;
+    }
+  }
+
+  // Thin or no text — this is a drawing/scan. Read it with vision.
+  console.log(`[extraction] thin text (${textLen} chars) — reading "${sourceFileName || "document"}" with vision`);
+  const images = await renderPages(pdfBuffer);
+  return extractFromImages(images, docLabel, sourceFileName);
+}
+
+/** Prefer vision's identity, keep the union of attributes/notes. */
+function mergeExtractions(base, extra) {
+  const model = { ...(base.model || {}) };
+  for (const k of ["brand", "model_number", "category", "equipment_type", "series", "power_type", "display_name", "description"]) {
+    if (!String(model[k] || "").trim() && String(extra?.model?.[k] || "").trim()) model[k] = extra.model[k];
+  }
+  return {
+    model,
+    attributes: [...(base.attributes || []), ...(extra?.attributes || [])],
+    notes: [...(base.notes || []), ...(extra?.notes || [])],
+  };
+}
+
+/** One OpenAI call with the shared, honest error mapping. */
+async function callOpenAI(messages) {
   try {
-    resp = await getOpenAI().chat.completions.create({
+    return await getOpenAI().chat.completions.create({
       model: env.extractionModel,
       temperature: 0,
       response_format: { type: "json_schema", json_schema: EXTRACTION_SCHEMA },
-      messages: [
-        { role: "system", content: SYSTEM_PROMPT },
-        { role: "user", content: userContent },
-      ],
+      messages,
     });
   } catch (err) {
     const msg = err?.message || String(err);
     const status = err?.status || err?.statusCode;
     const code = err?.code || err?.error?.code;
-
-    // ALWAYS log the original error. Mapping it to a friendly message must never destroy the root
-    // cause — a masked error made a plain rate-limit look like a billing problem and cost real
-    // debugging time. This line is what makes the true failure visible in the server log.
+    // ALWAYS log the original error — masking a rate-limit as a billing problem once cost real time.
     console.error(`[extraction] OpenAI call failed — status=${status} code=${code} model=${env.extractionModel}: ${msg}`);
-
-    // A genuine BILLING problem: the account is out of credit. Permanent until topped up.
     if (code === "insufficient_quota" || /insufficient_quota|billing|exceeded your current quota/i.test(msg)) {
       throw Object.assign(
-        new Error(
-          "OpenAI quota exceeded. AI PDF/folder extraction needs billing credits on the OpenAI account. Excel bulk and manual entry still work without AI.",
-        ),
+        new Error("OpenAI quota exceeded. AI PDF/folder extraction needs billing credits on the OpenAI account. Excel bulk and manual entry still work without AI."),
         { status: 402 },
       );
     }
-    // A 429 that is NOT insufficient_quota is a TRANSIENT rate limit (requests/tokens per minute).
-    // Telling the user to buy credits here would be wrong — they simply need to retry shortly.
     if (status === 429) {
       throw Object.assign(
         new Error("OpenAI is rate-limiting this account right now. Wait a moment and retry — this is temporary, not a billing problem."),
@@ -180,7 +271,9 @@ async function extractFromPages(pages, docLabel, sourceFileName = "") {
     }
     throw Object.assign(new Error(msg), { status: status && status < 500 ? status : 502 });
   }
+}
 
+function parseExtraction(resp) {
   const raw = resp.choices[0]?.message?.content || "{}";
   const parsed = JSON.parse(raw);
   parsed.attributes = parsed.attributes || [];
@@ -189,4 +282,4 @@ async function extractFromPages(pages, docLabel, sourceFileName = "") {
   return parsed;
 }
 
-module.exports = { extractFromPages };
+module.exports = { extractFromPages, extractFromImages, extractFromPdf };

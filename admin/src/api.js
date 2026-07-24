@@ -140,6 +140,9 @@ export const api = {
   uploadManual: (payload) => jf(`/api/ingest/manual`, payload),
   uploadImage: (entryId, file) => { const fd = new FormData(); fd.append("image", file); return f(`/api/ingest/image/${entryId}`, { method: "POST", body: fd }); },
   findDocuments: (id) => f(`/api/entries/${id}/find-documents`),
+  // Approved equipment from the EOS Library — used by the Engineering Inbox to pick equipment
+  // instead of typing brand/model by hand. Returns approved entries only, by design.
+  approvedEquipment: (query = "") => f(`/api/knowledge?limit=30${query ? `&query=${encodeURIComponent(query)}` : ""}`),
   drafts: (status = "pending") => f(`/api/drafts?status=${status}`),
   entry: (id) => f(`/api/entries/${id}`),
   patchAttr: (id, patch) => jf(`/api/attributes/${id}`, patch, "PATCH"),

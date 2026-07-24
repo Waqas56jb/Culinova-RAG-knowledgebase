@@ -4,7 +4,7 @@ const crypto = require("crypto");
 
 const { supabase } = require("../config/supabase");
 const { extractPages } = require("./pdf");
-const { extractFromPages } = require("./extraction");
+const { extractFromPdf } = require("./extraction");
 const { uploadBuffer } = require("./storage");
 const { extractMainImage } = require("./pdfImage");
 const { persistDraft } = require("../utils/draft");
@@ -85,8 +85,9 @@ async function ingestModelFiles({ modelPath, files, log = () => {} }) {
   }
   const results = [];
   for (const c of extractSources) {
-    const { pages, numpages } = await extractPages(c.buffer);
-    const r = await extractFromPages(pages, c.label, c.file || c.name);
+    const { numpages } = await extractPages(c.buffer);
+    // text first, auto-escalating to vision for drawing/scanned datasheets
+    const r = await extractFromPdf(c.buffer, c.label, c.file || c.name);
     results.push({ c, r, buf: c.buffer, numpages });
     log(`  extracted ${c.label}: ${r.attributes.length} fields (${numpages}p)`);
   }

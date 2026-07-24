@@ -143,28 +143,33 @@ export default function EngineeringInbox() {
           <p className="muted" style={{ marginBottom: 8 }}><b>BOQ text</b> (free-form requirements from sales)</p>
           <textarea rows={3} value={form.boq_text} disabled={!canManage} onChange={(e) => setForm({ ...form, boq_text: e.target.value })} style={{ width: "100%", marginBottom: 12 }} />
 
-          <p className="muted" style={{ marginBottom: 8 }}><b>Approved equipment lines</b> — match by item_id, item_code, or brand+model (resolved on ERP)</p>
+          <p className="muted" style={{ marginBottom: 8 }}><b>Approved equipment lines</b> — pick from the EOS Library; brand, name and model are filled from the approved record (no manual entry).</p>
           <div className="scroll-x">
             <table className="grid">
               <thead>
                 <tr>
-                  <th>Item ID</th><th>Code</th><th>Name</th><th>Brand</th><th>Model</th><th>Qty</th><th>Area</th>
+                  <th>Equipment (from Library)</th><th>Brand</th><th>Model</th><th>Qty</th><th>Area</th>
                   {canManage && <th></th>}
                 </tr>
               </thead>
               <tbody>
                 {form.lines.map((l, i) => (
                   <tr key={i}>
-                    {["item_id", "item_code", "item_name", "brand", "model", "qty", "area"].map((k) => (
-                      <td key={k}>
-                        <input
-                          value={l[k]}
-                          disabled={!canManage}
-                          onChange={(e) => setLine(i, { [k]: e.target.value })}
-                          style={{ minWidth: k === "item_name" ? 140 : 80 }}
-                        />
-                      </td>
-                    ))}
+                    <td style={{ minWidth: 240 }}>
+                      {canManage
+                        ? <EquipmentPicker line={l} onPick={(eq) => setLine(i, eq)} />
+                        : <span>{l.item_name || l.item_code || "—"}</span>}
+                    </td>
+                    <td>{l.brand || "—"}</td>
+                    <td>{l.model || "—"}</td>
+                    <td>
+                      <input type="number" min={1} value={l.qty} disabled={!canManage}
+                        onChange={(e) => setLine(i, { qty: e.target.value })} style={{ width: 64 }} />
+                    </td>
+                    <td>
+                      <input value={l.area} disabled={!canManage}
+                        onChange={(e) => setLine(i, { area: e.target.value })} style={{ minWidth: 90 }} placeholder="e.g. Main kitchen" />
+                    </td>
                     {canManage && (
                       <td>
                         <button type="button" className="x" onClick={() => setForm((f) => ({ ...f, lines: f.lines.filter((_, j) => j !== i) }))}>×</button>
@@ -176,7 +181,7 @@ export default function EngineeringInbox() {
             </table>
           </div>
           {canManage && (
-            <Btn className="small" style={{ marginTop: 8 }} onClick={() => setForm((f) => ({ ...f, lines: [...f.lines, emptyLine()] }))}>+ Add line</Btn>
+            <Btn className="small" style={{ marginTop: 8 }} onClick={() => setForm((f) => ({ ...f, lines: [...f.lines, emptyLine()] }))}>+ Add equipment line</Btn>
           )}
 
           {detail.sales_notes && (
@@ -185,5 +190,80 @@ export default function EngineeringInbox() {
         </SectionCard>
       )}
     </PagePanel>
+  );
+}
+
+/**
+ * Approved-equipment picker for an engineering-request line.
+ *
+ * The engineer selects equipment from the EOS Library (approved records only) instead of typing
+ * brand / name / model — which is what the client asked for: "Equipment should be selected from the
+ * EOS Library Approved Equipment… Selecting an existing equipment should automatically populate all
+ * related information." On select we fill item_id (the entry id), item_code, item_name, brand and
+ * model from the approved record, so the identity can never be mistyped.
+ */
+function EquipmentPicker({ line, onPick }) {
+  const [q, setQ] = useState("");
+  const [open, setOpen] = useState(false);
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    let alive = true;
+    setLoading(true);
+    const t = setTimeout(() => {
+      api.approvedEquipment(q)
+        .then((r) => { if (alive) setRows(Array.isArray(r?.items) ? r.items : []); })
+        .catch(() => { if (alive) setRows([]); })
+        .finally(() => { if (alive) setLoading(false); });
+    }, 250);
+    return () => { alive = false; clearTimeout(t); };
+  }, [q, open]);
+
+  const pick = (e) => {
+    onPick({
+      item_id: e.id,
+      item_code: e.code || e.model_number || "",
+      item_name: e.title || e.display_name || "",
+      brand: e.brand || "",
+      model: e.model_number || e.code || "",
+    });
+    setOpen(false);
+    setQ("");
+  };
+
+  if (line.item_id || line.item_name) {
+    return (
+      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+        <span><b>{line.item_name || line.item_code}</b></span>
+        <button type="button" className="linkish" style={{ fontSize: 11 }} onClick={() => onPick({ item_id: "", item_code: "", item_name: "", brand: "", model: "" })}>change</button>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ position: "relative" }}>
+      <input
+        value={q}
+        placeholder="Search approved equipment…"
+        onFocus={() => setOpen(true)}
+        onChange={(e) => { setQ(e.target.value); setOpen(true); }}
+        style={{ minWidth: 220 }}
+      />
+      {open && (
+        <div style={{ position: "absolute", zIndex: 30, top: "100%", left: 0, right: 0, maxHeight: 260, overflowY: "auto", background: "#fff", border: "1px solid var(--line)", borderRadius: 10, boxShadow: "var(--shadow-md)", marginTop: 4 }}>
+          {loading && <div className="muted" style={{ padding: 10, fontSize: 12 }}>Searching…</div>}
+          {!loading && rows.length === 0 && <div className="muted" style={{ padding: 10, fontSize: 12 }}>No approved equipment matches. Only approved Library items can be selected.</div>}
+          {rows.map((e) => (
+            <button type="button" key={e.id} onClick={() => pick(e)}
+              style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 10px", border: 0, borderBottom: "1px solid #f1f5f9", background: "transparent", cursor: "pointer" }}>
+              <div style={{ fontWeight: 600, fontSize: 13 }}>{e.title || e.display_name}</div>
+              <div className="muted" style={{ fontSize: 11 }}>{[e.brand, e.model_number || e.code, e.category].filter(Boolean).join(" · ")}</div>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }

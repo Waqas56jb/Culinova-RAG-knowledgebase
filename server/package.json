@@ -12,6 +12,7 @@
     "test:engine": "node cli/verify-engine.js"
   },
   "dependencies": {
+    "@napi-rs/canvas": "^1.0.2",
     "@supabase/supabase-js": "^2.45.4",
     "bcryptjs": "^3.0.3",
     "chromadb": "^1.9.2",

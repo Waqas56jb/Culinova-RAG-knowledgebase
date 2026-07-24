@@ -81,4 +81,67 @@ async function extractMainImage(pdfBuffer, { maxPages = 3, minDim = 120 } = {}) 
   return best ? { buffer: best.buffer, width: best.width, height: best.height } : null;
 }
 
-module.exports = { extractMainImage };
+/**
+ * Render whole PDF pages to PNG images.
+ *
+ * This is what lets EOS read a datasheet the way a person does. Many manufacturer datasheets are
+ * technical drawings or scanned sheets: the model number and specs are drawn as vector graphics or
+ * outlined fonts, so NO text layer exists to parse (the CULINOVA "Pelapatate PL30" sheet extracts
+ * zero text yet clearly prints the model in its header). Rasterising the page and handing the image
+ * to a vision model recovers exactly what the eye sees.
+ *
+ * @returns {Promise<Buffer[]>} one PNG buffer per rendered page
+ */
+async function renderPages(pdfBuffer, { maxPages = 4, scale = 2.0, maxDim = 2200 } = {}) {
+  const pdfjs = getPdfjs();
+  // @napi-rs/canvas is a prebuilt native canvas — no build step, works headless in Node.
+  const { createCanvas } = require("@napi-rs/canvas");
+
+  // pdfjs creates intermediate canvases internally (image masks, patterns). By default in Node it
+  // `require('canvas')` (node-canvas, which needs a native build). Supplying our own factory backed
+  // by @napi-rs/canvas removes that dependency entirely.
+  class NapiCanvasFactory {
+    create(width, height) {
+      const canvas = createCanvas(Math.max(1, width), Math.max(1, height));
+      return { canvas, context: canvas.getContext("2d") };
+    }
+    reset(cc, width, height) {
+      cc.canvas.width = Math.max(1, width);
+      cc.canvas.height = Math.max(1, height);
+    }
+    destroy(cc) {
+      if (cc.canvas) { cc.canvas.width = 0; cc.canvas.height = 0; }
+      cc.canvas = null;
+      cc.context = null;
+    }
+  }
+
+  const doc = await pdfjs.getDocument({
+    data: new Uint8Array(pdfBuffer),
+    disableFontFace: true,
+    isEvalSupported: false,
+    canvasFactory: new NapiCanvasFactory(),
+  }).promise;
+  const count = Math.min(doc.numPages, maxPages);
+  const out = [];
+
+  for (let p = 1; p <= count; p++) {
+    const page = await doc.getPage(p);
+    let vp = page.getViewport({ scale });
+    // keep the largest side within maxDim so the payload stays reasonable for the vision model
+    const longest = Math.max(vp.width, vp.height);
+    if (longest > maxDim) vp = page.getViewport({ scale: (scale * maxDim) / longest });
+
+    const canvas = createCanvas(Math.ceil(vp.width), Math.ceil(vp.height));
+    const ctx = canvas.getContext("2d");
+    ctx.fillStyle = "white";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    await page.render({ canvasContext: ctx, viewport: vp }).promise;
+    out.push(canvas.toBuffer("image/png"));
+    page.cleanup();
+  }
+  await doc.cleanup();
+  return out;
+}
+
+module.exports = { extractMainImage, renderPages };

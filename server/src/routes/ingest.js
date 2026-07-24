@@ -4,7 +4,7 @@ const crypto = require("crypto");
 
 const { supabase } = require("../config/supabase");
 const { extractPages } = require("../services/pdf");
-const { extractFromPages } = require("../services/extraction");
+const { extractFromPdf } = require("../services/extraction");
 const { uploadPdf, uploadBuffer } = require("../services/storage");
 const { ingestModelFiles } = require("../services/ingestModel");
 const { extractMainImage } = require("../services/pdfImage");
@@ -106,7 +106,9 @@ router.post("/pdf", canIngest, upload.array("files", 10), async (req, res) => {
         .single();
       if (doc.error) throw new Error(doc.error.message);
 
-      const extracted = await extractFromPages(pages, label, file.originalname);
+      // extractFromPdf reads text first and automatically escalates to VISION on drawing/scanned
+      // sheets whose model number is printed in a graphic (e.g. "Pelapatate PL30") rather than text.
+      const extracted = await extractFromPdf(file.buffer, label, file.originalname);
       await supabase.from("ceks_import_documents").update({ status: "extracted" }).eq("id", doc.data.id);
 
       results.push({ docId: doc.data.id, label, docType, buffer: file.buffer, result: extracted });
