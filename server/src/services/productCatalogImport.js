@@ -47,6 +47,48 @@ function identityKeyFor(header) {
 /** A column that states whether a utility is needed at all (e.g. "Electrical Requirement"). */
 const REQUIREMENT_RE = /\b(requirement|required|connection)\b/i;
 
+/** An image / photo column, matched by keyword so any sheet's naming works. */
+const IMAGE_RE = /\b(image|images|photo|photos|picture|pictures|thumbnail|thumb)\b/;
+const isImageHeader = (h) => IMAGE_RE.test(norm(h));
+/** Only real, renderable image references become the product image. */
+const isDisplayableImage = (v) => /^(https?:\/\/|data:image\/)/i.test(String(v || "").trim());
+
+// Units are DATA, not column names — extend freely. Only used to peel a bare trailing unit token;
+// a parenthetical unit needs no lexicon at all.
+const UNIT_TOKENS = new Set([
+  "mm", "cm", "m", "km", "in", "ft", "kg", "g", "mg", "t", "l", "ml",
+  "w", "kw", "kva", "v", "a", "hz", "cfm", "m3h", "m³h", "bar", "pa", "kpa", "psi",
+  "c", "f", "°c", "°f", "rpm", "db", "lm", "lux", "%",
+]);
+const unitKey = (s) => String(s).toLowerCase().replace(/[^a-z0-9°%]/g, "");
+
+/**
+ * Split ANY header into { name, unit, mandatory }. Generalized — no column names hardcoded:
+ *   "Length (mm)*"          → { name: "Length", unit: "mm", mandatory: true }
+ *   "Bowl Size (L×W×D mm)"  → { name: "Bowl Size", unit: "L×W×D mm" }
+ *   "Hood Exhaust CFM"      → { name: "Hood Exhaust", unit: "CFM" }
+ *   "Material*"             → { name: "Material", unit: null, mandatory: true }
+ *   "Backsplash Height"     → { name: "Backsplash Height", unit: null }  (no false unit)
+ */
+function parseHeader(rawHeader) {
+  const original = String(rawHeader == null ? "" : rawHeader).trim();
+  let name = original;
+  const mandatory = name.includes("*"); // "*" anywhere marks a mandatory field
+  name = name.replace(/\*/g, "").trim();
+  let unit = null;
+  const paren = name.match(/[([{]\s*([^()[\]{}]*?)\s*[)\]}]\s*$/); // trailing (mm), [°C], (L×W×D mm)
+  if (paren) {
+    unit = paren[1].trim() || null;
+    name = name.slice(0, paren.index).trim();
+  } else {
+    // a bare trailing unit token, but only when it is a RECOGNISED unit (never strip real words)
+    const m = name.match(/[\s/]([^\s/]+)$/);
+    if (m && UNIT_TOKENS.has(unitKey(m[1]))) { unit = m[1].trim(); name = name.slice(0, m.index).trim(); }
+  }
+  name = name.replace(/[\s/×xX,.\-–—:]+$/u, "").trim(); // tidy any dangling separator
+  return { name: name || original.replace(/\*/g, "").trim(), unit, mandatory };
+}
+
 /**
  * Decide, for every column, what it means. Returns a plan the caller can inspect before committing.
  */
@@ -62,21 +104,30 @@ async function planColumns(headers, { dict, disciplines }) {
     const idKey = identityKeyFor(header);
     if (idKey) { plan.push({ index: i, header, kind: "identity", identity: idKey }); continue; }
 
-    // 1) dictionary: header → canonical parameter → its discipline
-    const param = dictSvc.resolveParameter(dict, header);
+    // an image / photo column — captured before attribute classification so it is never misfiled
+    if (isImageHeader(header)) { plan.push({ index: i, header, kind: "image" }); continue; }
+
+    // split the header into a clean field name, its unit, and whether it is mandatory ("*")
+    const parsed = parseHeader(header);
+
+    // 1) dictionary: prefer the CLEAN name (better matches), fall back to the raw header
+    const param = dictSvc.resolveParameter(dict, parsed.name) || dictSvc.resolveParameter(dict, header);
     let discipline = null;
     if (param?.discipline_id) {
       const d = dict.disciplineById.get(param.discipline_id);
       if (d) discipline = d.code;
     }
-    // 2) fall back to matching the header against the disciplines table itself
-    if (!discipline) discipline = disciplineForLabel(header, disciplines);
+    // 2) fall back to matching the (clean) name against the disciplines table itself
+    if (!discipline) discipline = disciplineForLabel(parsed.name, disciplines) || disciplineForLabel(header, disciplines);
 
     const disc = disciplines.find((d) => d.code === discipline);
     plan.push({
       index: i,
       header,
       kind: "attribute",
+      field_name: parsed.name,
+      unit: parsed.unit,
+      mandatory: parsed.mandatory,
       parameter_id: param ? param.id : null,
       parameter_label: param ? param.label : null,
       discipline,
@@ -103,12 +154,23 @@ function rowToProduct(row, plan) {
   const id = {};
   const attributes = [];
   const notApplicable = new Set();
+  let image_url = null;
+  const notes = [];
 
   for (const col of plan) {
     if (col.kind === "ignore") continue;
     const raw = clean(row[col.index]);
 
     if (col.kind === "identity") { if (raw) id[col.identity] = raw; continue; }
+
+    // an image column: a displayable URL becomes the product image; a bare folder/file name is
+    // recorded as a note (visible to the reviewer) rather than shown as a broken <img> or a fake spec.
+    if (col.kind === "image") {
+      if (!raw) continue;
+      if (isDisplayableImage(raw)) { if (!image_url) image_url = raw; }
+      else notes.push({ note_type: "photo_reference", content: `${col.header}: ${raw}` });
+      continue;
+    }
 
     // A requirement column that says N/A switches the WHOLE discipline off for this item.
     if (col.is_requirement && !hasRealValue(raw)) { notApplicable.add(col.discipline); continue; }
@@ -117,16 +179,17 @@ function rowToProduct(row, plan) {
 
     attributes.push({
       attr_group: col.attr_group,
-      name: col.parameter_label || col.header,
+      name: col.parameter_label || col.field_name || col.header,
       value: raw,
-      unit: null,
+      unit: col.unit || null,
+      mandatory: !!col.mandatory,
       origin: "manual",
       source_document: "CULINOVA Product Catalogue",
       confidence: 1,
       verified: false,
     });
   }
-  return { id, attributes, notApplicable: [...notApplicable] };
+  return { id, attributes, notApplicable: [...notApplicable], image_url, notes };
 }
 
 /** Preview — classify everything, write nothing. */
@@ -171,7 +234,7 @@ async function importWorkbook(wb, { sheet = null, source_file = null, actor = nu
   const report = { products: rows.length, imported: 0, skipped: 0, attributes: 0, not_applicable_tally: {}, errors: [] };
 
   for (let r = 0; r < rows.length; r++) {
-    const { id, attributes, notApplicable } = rowToProduct(rows[r], plan);
+    const { id, attributes, notApplicable, image_url, notes: photoNotes } = rowToProduct(rows[r], plan);
     if (!id.code && !id.name) { report.skipped++; continue; }
 
     try {
@@ -185,9 +248,17 @@ async function importWorkbook(wb, { sheet = null, source_file = null, actor = nu
           brand: id.source || "CULINOVA",
         },
         attributes,
-        notes: id.remarks ? [{ content: id.remarks, note_type: "engineering" }] : [],
+        notes: [
+          ...(id.remarks ? [{ content: id.remarks, note_type: "engineering" }] : []),
+          ...(photoNotes || []),
+        ],
         origin: "excel",
       });
+
+      // a displayable image URL becomes the product image
+      if (image_url && draft?.model?.id) {
+        await supabase.from("ceks_models").update({ image_url }).eq("id", draft.model.id);
+      }
 
       // record the utilities this product explicitly does NOT need, so the UI hides those sections
       if (notApplicable.length && draft?.version_id) {

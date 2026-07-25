@@ -1,7 +1,7 @@
 const express = require("express");
 const { supabase } = require("../config/supabase");
 const { approveAndIndex, setStatus } = require("../utils/workflow");
-const { sanitizeSearch } = require("../utils/pgrst");
+const { buildOrIlike } = require("../utils/pgrst");
 const auth = require("../services/auth");
 
 const router = express.Router();
@@ -39,8 +39,9 @@ router.get("/entries", canRead, async (req, res) => {
     q = applyFacet(q, "power_type", power_type);
     if (origin) q = q.eq("origin", origin);
     if (search) {
-      const s = sanitizeSearch(search);
-      if (s) q = q.or(`title.ilike.%${s}%,code.ilike.%${s}%,model_number.ilike.%${s}%`);
+      // dotted model codes (TBS.180) must survive — buildOrIlike quotes the value so "." is literal
+      const clause = buildOrIlike(["title", "code", "model_number"], search);
+      if (clause) q = q.or(clause);
     }
     q = q.order(sort, { ascending: order }).range((page - 1) * limit, (page - 1) * limit + limit - 1);
 

@@ -2,7 +2,7 @@ const express = require("express");
 const { supabase } = require("../config/supabase");
 const { getEntryDetail } = require("../utils/detail");
 const { semanticSearch } = require("../services/embeddings");
-const { sanitizeSearch } = require("../utils/pgrst");
+const { buildOrIlike } = require("../utils/pgrst");
 
 const router = express.Router();
 
@@ -28,13 +28,14 @@ router.get("/", async (req, res) => {
         const sorted = (data || []).sort((a, b) => (order.get(a.id) ?? 999) - (order.get(b.id) ?? 999));
         return res.json({ items: sorted.slice(from, to + 1), page, limit, total: sorted.length, mode: "semantic" });
       }
-      // fallback: indexed text search on title/code (input neutralised for the PostgREST filter grammar)
-      const s = sanitizeSearch(query);
+      // fallback: indexed text search on title/code. buildOrIlike keeps dotted model codes (TBS.180)
+      // searchable by quoting the value in the PostgREST filter grammar.
+      const clause = buildOrIlike(["title", "code"], query);
       let tq = supabase
         .from("ceks_knowledge_entries")
         .select("*", { count: "exact" })
         .eq("current_status", "approved");
-      if (s) tq = tq.or(`title.ilike.%${s}%,code.ilike.%${s}%`);
+      if (clause) tq = tq.or(clause);
       const { data, count } = await tq.order("title").range(from, to);
       return res.json({ items: data || [], page, limit, total: count || 0, mode: "text" });
     }

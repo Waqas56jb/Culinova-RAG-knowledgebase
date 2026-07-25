@@ -12,6 +12,7 @@ const { supabase } = require("../config/supabase");
 const { env } = require("../config/env");
 const auth = require("../services/auth");
 const dictSvc = require("../services/params");
+const { buildOrIlike } = require("../utils/pgrst");
 const expr = require("../services/expression");
 const recs = require("../services/recommendations");
 const ruleImport = require("../services/ruleImport");
@@ -102,7 +103,10 @@ router.get(
     if (req.query.status) q = q.eq("status", req.query.status);
     if (req.query.type) q = q.eq("rule_type", req.query.type);
     if (req.query.active === "1") q = q.eq("is_active", true);
-    if (req.query.q) q = q.or(`code.ilike.%${String(req.query.q).replace(/[%,()]/g, "")}%,name.ilike.%${String(req.query.q).replace(/[%,()]/g, "")}%`);
+    if (req.query.q) {
+      const clause = buildOrIlike(["code", "name"], req.query.q);
+      if (clause) q = q.or(clause);
+    }
 
     const { data, count, error } = await q;
     if (error) throw new Error(error.message);

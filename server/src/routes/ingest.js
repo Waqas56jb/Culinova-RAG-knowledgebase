@@ -58,7 +58,9 @@ const DOC_LABELS = {
 };
 
 function mergeModel(results) {
-  const keys = ["category", "equipment_type", "brand", "model_number", "display_name", "description"];
+  // Merge the FULL identity set the downstream consumers use (draft.js / entry.power_type). Missing
+  // series + power_type here meant a PDF-imported model lost both, while the folder path kept them.
+  const keys = ["category", "equipment_type", "brand", "series", "model_number", "power_type", "display_name", "description"];
   const merged = {};
   for (const k of keys) {
     for (const r of results) {

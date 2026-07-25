@@ -71,9 +71,20 @@ async function bulkCreateProducts(products, { origin = "excel", sourceDocument =
       model_number: code,
       display_name: p.id.name || code,
       description: p.id.description || null,
+      image_url: p.image_url || null, // a displayable image from the sheet lands on the model row
     });
   }
   for (const m of await insertMany("ceks_models", newModels, "models")) modelMap.set(modelKey(m.brand_id, m.model_number), m);
+
+  // set images on models that already existed (re-import) too — cheap, images are rare
+  for (const p of usable) {
+    if (!p.image_url) continue;
+    const m = modelMap.get(modelKey(brandFor(p).id, p.id.code || p.id.name));
+    if (m && m.image_url !== p.image_url) {
+      const { error } = await supabase.from("ceks_models").update({ image_url: p.image_url }).eq("id", m.id);
+      if (error) out.errors.push({ error: `image update: ${error.message}` });
+    }
+  }
 
   // ── 3. DEDUP — one knowledge entry per model, exactly like persistDraft() ──────────────────────
   // Re-uploading the same sheet must NOT create a second entry for the same product. Where a model
@@ -182,6 +193,8 @@ async function bulkCreateProducts(products, { origin = "excel", sourceDocument =
       });
     });
     if (clean(p.id.remarks)) noteRows.push({ version_id: v.id, content: clean(p.id.remarks), note_type: "engineering" });
+    // a non-displayable photo folder/file reference is kept as a note (never a broken image)
+    for (const n of p.notes || []) noteRows.push({ version_id: v.id, content: n.content, note_type: n.note_type || "engineering" });
     historyRows.push({
       version_id: v.id,
       from_status: null,

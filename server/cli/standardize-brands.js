@@ -17,24 +17,17 @@
  */
 require("dotenv").config();
 const { supabase } = require("../src/config/supabase");
+const { canonicalBrand, loadAliases } = require("../src/utils/brandCanonical");
 
-// variant (lower-cased, trimmed) → canonical brand. A product LINE/standard is NOT a brand.
-const CANONICAL = {
-  "culinova": "CULINOVA",
-  "culinova standard": "CULINOVA", // "Standard" is a product line, not a separate brand
-  "culinox": "CULINOVA", // client: same company as CULINOVA
-  "nova cool": "NOVA COOL",
-  "bartscher": "BARTSCHER",
-  "fagor": "FAGOR",
-  "fafor": "FAGOR", // typo of FAGOR
-};
-
+// The canonical map is now the SHARED module used at import time too, so the CLI and create-time can
+// never disagree. Returns null when a brand is already canonical (nothing to change).
 const canonicalOf = (name) => {
-  const key = String(name || "").trim().toLowerCase();
-  return CANONICAL[key] || null; // null = leave untouched (genuinely distinct brand)
+  const canon = canonicalBrand(name);
+  return canon === name ? null : canon;
 };
 
 async function run(dryRun) {
+  await loadAliases(supabase); // hydrate any client-added aliases from ceks_brand_aliases (if present)
   console.log(`\n  Standardising brands${dryRun ? " (DRY RUN — nothing is written)" : ""}\n  ${"─".repeat(50)}`);
 
   // 1) entries — brand + title

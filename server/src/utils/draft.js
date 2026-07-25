@@ -1,5 +1,6 @@
 const crypto = require("crypto");
 const { supabase } = require("../config/supabase");
+const { canonicalBrand } = require("./brandCanonical");
 
 function slug(text, fallback = "ITEM") {
   const s = (text || "").toString().trim().toUpperCase().replace(/[^A-Z0-9]+/g, "-").replace(/^-|-$/g, "");
@@ -42,7 +43,10 @@ async function findOrCreateType(categoryId, name) {
 }
 
 async function findOrCreateBrand(typeId, name) {
-  const clean = name || "Unknown";
+  // Canonicalise at the choke point: this normalises the cache key, the ilike lookup, the inserted
+  // ceks_brands.name AND the denormalized entry.brand (brand.name flows into identityFields), for
+  // BOTH persistDraft and bulkCreate — so no re-import can ever re-introduce CULINOVA Standard / etc.
+  const clean = canonicalBrand(name || "Unknown");
   const key = typeId + "|" + clean.toLowerCase();
   if (_cache.brand.has(key)) return _cache.brand.get(key);
   let row = await first(supabase.from("ceks_brands").select("*").eq("equipment_type_id", typeId).ilike("name", clean));
