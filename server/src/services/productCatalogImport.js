@@ -90,6 +90,24 @@ function parseHeader(rawHeader) {
 }
 
 /**
+ * Peel a trailing unit off a VALUE cell — but ONLY a recognised unit right after a number, so real
+ * values are never mangled:
+ *   "1 mm"    → { value: "1",    unit: "mm" }
+ *   "12.5kg"  → { value: "12.5", unit: "kg" }
+ *   "SS304"   → { value: "SS304", unit: null }   (not number-led)
+ *   "700"     → { value: "700",  unit: null }     (no unit part)
+ *   "R 1/2"   → { value: "R 1/2", unit: null }     ("1/2" is not a known unit)
+ * Used when the column header carried no unit of its own, so a unit written inside the cell still
+ * lands in the dedicated unit column instead of staying stuck in the value.
+ */
+function splitValueUnit(rawValue) {
+  const v = String(rawValue == null ? "" : rawValue).trim();
+  const m = v.match(/^(-?[\d.,]+)\s*([A-Za-zµ°%/³²]+)$/);
+  if (m && UNIT_TOKENS.has(unitKey(m[2]))) return { value: m[1].trim(), unit: m[2].trim() };
+  return { value: v, unit: null };
+}
+
+/**
  * Decide, for every column, what it means. Returns a plan the caller can inspect before committing.
  */
 async function planColumns(headers, { dict, disciplines }) {
@@ -177,11 +195,13 @@ function rowToProduct(row, plan) {
     // Any other empty / N/A cell is simply absent — never store a fake "N/A" value.
     if (!hasRealValue(raw)) continue;
 
+    // The header's own unit wins; otherwise peel a unit written inside the value cell ("1 mm" → 1 + mm).
+    const peeled = col.unit ? { value: raw, unit: col.unit } : splitValueUnit(raw);
     attributes.push({
       attr_group: col.attr_group,
       name: col.parameter_label || col.field_name || col.header,
-      value: raw,
-      unit: col.unit || null,
+      value: peeled.value,
+      unit: peeled.unit || null,
       mandatory: !!col.mandatory,
       origin: "manual",
       source_document: "CULINOVA Product Catalogue",
@@ -286,4 +306,4 @@ async function loadPlanContext() {
   return { dict, disciplines: disciplines || [] };
 }
 
-module.exports = { preview, importWorkbook, planColumns, rowToProduct, readSheet, loadPlanContext };
+module.exports = { preview, importWorkbook, planColumns, rowToProduct, readSheet, loadPlanContext, parseHeader, splitValueUnit, UNIT_TOKENS, unitKey };
