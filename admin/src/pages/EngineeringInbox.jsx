@@ -53,29 +53,38 @@ export default function EngineeringInbox() {
     lines: f.lines.map((l, idx) => (idx === i ? { ...l, ...patch } : l)),
   }));
 
-  const save = async () => {
+  // `targetStatus` lets the primary "Complete & send for Quotation" action force the handoff status
+  // without the engineer having to remember the exact string in the dropdown — the single most common
+  // way a completed request failed to reach Sales was it being pushed while still "Pending …".
+  const save = async (targetStatus) => {
     if (!detail) return;
+    const approved_items = form.lines
+      .filter((l) => l.item_id || l.item_code || l.item_name || (l.brand && l.model))
+      .map((l) => ({
+        item_id: l.item_id || undefined,
+        item_code: l.item_code || undefined,
+        item_name: l.item_name || undefined,
+        brand: l.brand || undefined,
+        model: l.model || undefined,
+        qty: Number(l.qty) || 1,
+        area: l.area || undefined,
+      }));
+    if (targetStatus === "Ready for Quotation" && !approved_items.length) {
+      setError("Select at least one equipment line before sending for quotation.");
+      return;
+    }
+    const status = targetStatus || form.status;
     setBusy(true);
     setError("");
     try {
-      const approved_items = form.lines
-        .filter((l) => l.item_id || l.item_code || l.item_name || (l.brand && l.model))
-        .map((l) => ({
-          item_id: l.item_id || undefined,
-          item_code: l.item_code || undefined,
-          item_name: l.item_name || undefined,
-          brand: l.brand || undefined,
-          model: l.model || undefined,
-          qty: Number(l.qty) || 1,
-          area: l.area || undefined,
-        }));
       const updated = await api.updateEngineeringRequest(detail.id, {
-        status: form.status,
+        status,
         boq_text: form.boq_text,
         sales_notes: form.sales_notes,
         approved_items,
       });
       setDetail(updated);
+      setForm((f) => ({ ...f, status: updated.status || status }));
       await load();
       if (updated._erp_sync && !updated._erp_sync.synced) {
         setError(`Saved on EOS but ERP sync failed: ${updated._erp_sync.error || updated._erp_sync.reason}`);
@@ -137,8 +146,20 @@ export default function EngineeringInbox() {
               </select>
             </label>
             <Btn className="small" onClick={() => setDetail(null)}>Close</Btn>
-            {canManage && <Btn className="small primary" disabled={busy} onClick={save}>{busy ? "Saving…" : "Save & push to ERP"}</Btn>}
+            {canManage && (
+              <>
+                <Btn className="small" disabled={busy} onClick={() => save()}>{busy ? "Saving…" : "Save progress"}</Btn>
+                <Btn className="small primary" disabled={busy} onClick={() => save("Ready for Quotation")} title="Sets status to Ready for Quotation and pushes the approved equipment back to Sales in the Custom ERP">
+                  {busy ? "Sending…" : "Complete & send for Quotation →"}
+                </Btn>
+              </>
+            )}
           </div>
+          {canManage && form.status !== "Ready for Quotation" && (
+            <p className="muted" style={{ marginTop: -4, marginBottom: 12, fontSize: 12 }}>
+              Sales sees the <b>Quotation</b> button in the ERP only once you click <b>Complete &amp; send for Quotation</b> — that marks the request <b>Ready for Quotation</b>. <b>Save progress</b> keeps the current status for mid-work saves.
+            </p>
+          )}
 
           <p className="muted" style={{ marginBottom: 8 }}><b>BOQ text</b> (free-form requirements from sales)</p>
           <textarea rows={3} value={form.boq_text} disabled={!canManage} onChange={(e) => setForm({ ...form, boq_text: e.target.value })} style={{ width: "100%", marginBottom: 12 }} />
