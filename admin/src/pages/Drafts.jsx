@@ -91,10 +91,14 @@ export default function Drafts({ onOpen, initialFilter }) {
     } catch (e) { setError(`Could not delete "${it.title}": ${e.message}`); } finally { setBusy(false); }
   }
 
+  // Power Type is a CLOSED set — an equipment is Electric, Gas or Neutral, nothing else. It is offered
+  // as a fixed list (not from distinct data), so stray values like "Oven" or a NULL "Unspecified"
+  // can never appear as if they were real power types.
+  const POWER_TYPES = ["Electric", "Gas", "Neutral"];
   const Dropdown = ({ k, label }) => (
     <select value={f[k]} onChange={(e) => setField(k, e.target.value)}>
       <option value="">{label}: All</option>
-      {(filters[k] || []).map((v) => <option key={v} value={v}>{v}</option>)}
+      {(k === "power_type" ? POWER_TYPES : filters[k] || []).map((v) => <option key={v} value={v}>{v}</option>)}
     </select>
   );
 
@@ -145,6 +149,7 @@ export default function Drafts({ onOpen, initialFilter }) {
             <thead>
               <tr>
                 <th className="narrow"><input type="checkbox" aria-label="Select all models" checked={sel.size === items.length && items.length > 0} onChange={toggleAll} /></th>
+                <th className="narrow">Image</th>
                 <th className="click" onClick={() => sortBy("brand")}>Brand{sortArrow("brand")}</th>
                 <th className="click" onClick={() => sortBy("model_number")}>Model{sortArrow("model_number")}</th>
                 <th className="click" onClick={() => sortBy("category")}>Category{sortArrow("category")}</th>
@@ -158,6 +163,11 @@ export default function Drafts({ onOpen, initialFilter }) {
               {items.map((it) => (
                 <tr key={it.id} className={sel.has(it.id) ? "selrow" : ""}>
                   <td className="narrow"><input type="checkbox" aria-label={`Select ${it.model_number || it.title}`} checked={sel.has(it.id)} onChange={() => toggle(it.id)} /></td>
+                  <td className="narrow">
+                    {it.image_url
+                      ? <img className="row-thumb" src={it.image_url} alt="" loading="lazy" onError={(e) => { e.currentTarget.style.visibility = "hidden"; }} />
+                      : <span className="row-thumb ph" aria-hidden>IMG</span>}
+                  </td>
                   <td>{it.brand || "—"}</td>
                   <td><button className="model-link" onClick={() => onOpen(it.id)}>{it.model_number || it.title}</button></td>
                   <td>{it.category || "—"}</td>

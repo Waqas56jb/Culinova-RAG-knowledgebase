@@ -46,7 +46,28 @@ router.get("/entries", canRead, async (req, res) => {
 
     const { data, count, error } = await q;
     if (error) throw new Error(error.message);
-    res.json({ items: data || [], total: count || 0, page, limit });
+
+    // Attach each entry's model image so the Library list can show it. The image lives on
+    // ceks_models (linked via ceks_knowledge_links), not on the entry row — without this join the
+    // list only ever had a placeholder, which is what the client saw.
+    const items = data || [];
+    const entryIds = items.map((e) => e.id);
+    if (entryIds.length) {
+      const { data: links } = await supabase
+        .from("ceks_knowledge_links")
+        .select("knowledge_entry_id, scope_id")
+        .eq("scope_type", "model")
+        .in("knowledge_entry_id", entryIds);
+      const modelIds = [...new Set((links || []).map((l) => l.scope_id).filter(Boolean))];
+      const { data: models } = modelIds.length
+        ? await supabase.from("ceks_models").select("id, image_url").in("id", modelIds)
+        : { data: [] };
+      const imgByModel = new Map((models || []).map((m) => [m.id, m.image_url]));
+      const modelByEntry = new Map((links || []).map((l) => [l.knowledge_entry_id, l.scope_id]));
+      for (const e of items) e.image_url = imgByModel.get(modelByEntry.get(e.id)) || null;
+    }
+
+    res.json({ items, total: count || 0, page, limit });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

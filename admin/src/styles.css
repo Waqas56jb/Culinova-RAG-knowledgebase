@@ -1714,3 +1714,22 @@ tr.std-pending td { background: #fffdf5; }
 
 .alert.warn { background: #fffbeb; border-color: #fde68a; color: #92400e; }
 .feed-line.rev .feed-mark { color: #d97706; }
+
+/* Library list equipment thumbnail */
+.row-thumb {
+  width: 36px;
+  height: 36px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: #f3f6fa;
+  display: block;
+}
+.row-thumb.ph {
+  display: grid;
+  place-items: center;
+  font-size: 8px;
+  font-weight: 700;
+  color: var(--ink-faint, #94a0ad);
+  letter-spacing: 0.5px;
+}
