@@ -2,6 +2,7 @@ const { supabase } = require("../config/supabase");
 const { getEntryDetail } = require("./detail");
 const { indexEntry } = require("../services/embeddings");
 const recs = require("../services/recommendations");
+const applicability = require("../services/applicability");
 
 /**
  * The ONE place a knowledge entry changes status. review.js used to carry its own copy of this logic;
@@ -36,9 +37,37 @@ async function setStatus(entryId, toStatus, comment, actor = null) {
 async function assertApprovable(entry) {
   if (!entry || !entry.current_version_id) return;
   const blockers = await recs.approvalBlockers(entry.current_version_id);
+
+  // The client's core engineering rule: EOS must guarantee COMPLETE, VALID data before an equipment
+  // record is trusted — not store incomplete data and fix it later. The applicability engine already
+  // decides which sections APPLY to this equipment (a stainless table has no electrical/water/gas, so
+  // those are never required). A section in the "missing" state is one the category standard REQUIRES
+  // for this equipment but which has no values — so approval is blocked until it is completed.
+  try {
+    // Load the entry's category link so the category standard's requirements are actually applied —
+    // forVersion only computes "required" sections when it knows which category profile governs.
+    const { data: full } = await supabase
+      .from("ceks_knowledge_entries")
+      .select("id, category, category_profile_id")
+      .eq("id", entry.id)
+      .maybeSingle();
+    const appl = await applicability.forVersion(entry.current_version_id, { entry: full });
+    for (const s of appl.sections || []) {
+      if (s.state === "missing") {
+        blockers.push({
+          type: "incomplete_section",
+          discipline: s.discipline,
+          message: `${s.label} is required for this equipment but has no values — complete it before approving.`,
+        });
+      }
+    }
+  } catch (e) {
+    console.warn(`[workflow] applicability completeness check skipped: ${e.message}`);
+  }
+
   if (blockers.length) {
     const e = new Error(
-      `Cannot approve yet — ${blockers.length} unresolved item(s): ` +
+      `Cannot approve yet — ${blockers.length} item(s) to complete: ` +
         blockers.slice(0, 3).map((b) => b.message).join(" ") + (blockers.length > 3 ? " …" : "")
     );
     e.status = 409;
