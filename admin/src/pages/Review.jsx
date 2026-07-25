@@ -543,9 +543,31 @@ export function CADPreview({ documents, files, fileUrl }) {
   const docs = documents || [];
   const cads = (files || []).filter((f) => f.asset_type === "cad");
   const preview = open || docs.find((d) => d.doc_type === "datasheet") || docs[0];
-  if (!preview && !cads.length) return null;
   const previewUrl = preview ? fileUrl(preview.storage_url) : "";
   const framable = preview ? isFramableStorageUrl(preview.storage_url, api.base) : false;
+
+  // Load the document through a same-origin blob: URL instead of framing the remote URL directly.
+  // Our API (and Supabase) send X-Frame-Options / CSP frame-ancestors that make Chrome refuse to embed
+  // the file cross-origin ("This page has been blocked by Chrome"), and some files carry
+  // Content-Disposition: attachment which forces a download instead of an inline view. Fetching the
+  // bytes (allowed cross-origin) and rendering the resulting blob sidesteps both — the blob is
+  // same-origin to this page, so nothing can block or re-download it.
+  const [blobUrl, setBlobUrl] = useState("");
+  const [blobFailed, setBlobFailed] = useState(false);
+  useEffect(() => {
+    setBlobUrl(""); setBlobFailed(false);
+    if (!previewUrl || !framable) return;
+    let cancelled = false; let objectUrl = "";
+    fetch(previewUrl, { credentials: "omit" })
+      .then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.blob(); })
+      .then((b) => { if (cancelled) return; objectUrl = URL.createObjectURL(b); setBlobUrl(objectUrl); })
+      .catch(() => { if (!cancelled) setBlobFailed(true); });
+    return () => { cancelled = true; if (objectUrl) URL.revokeObjectURL(objectUrl); };
+  }, [previewUrl, framable]);
+
+  if (!preview && !cads.length) return null;
+  const showInline = framable && blobUrl && !blobFailed;
+  const stillLoading = framable && !blobUrl && !blobFailed;
   return (
     <div className="group">
       <h2>Document Preview</h2>
@@ -558,17 +580,19 @@ export function CADPreview({ documents, files, fileUrl }) {
               </button>
             ))}
           </div>
-          {framable ? (
+          {showInline ? (
             <iframe
               title="document preview"
               className="pdf-frame"
-              src={previewUrl}
+              src={blobUrl}
               sandbox={PDF_SANDBOX}
               referrerPolicy="no-referrer"
             />
+          ) : stillLoading ? (
+            <div className="preview-fallback muted"><p>Loading document…</p></div>
           ) : (
             <div className="preview-fallback muted">
-              <p>This document is hosted on an external source and can't be previewed securely inline.</p>
+              <p>This document can't be previewed inline. Open it in a new tab instead.</p>
               {previewUrl && <a className="btn small" href={previewUrl} target="_blank" rel="noreferrer">Open document ↗</a>}
             </div>
           )}

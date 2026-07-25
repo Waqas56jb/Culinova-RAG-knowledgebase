@@ -102,7 +102,14 @@ function parseHeader(rawHeader) {
  */
 function splitValueUnit(rawValue) {
   const v = String(rawValue == null ? "" : rawValue).trim();
-  const m = v.match(/^(-?[\d.,]+)\s*([A-Za-zµ°%/³²]+)$/);
+  // a) a plain number followed by a unit — "1 mm" → 1 + mm, "12.5kg" → 12.5 + kg
+  let m = v.match(/^(-?[\d.,]+)\s*([A-Za-zµ°%/³²]+)$/);
+  if (m && UNIT_TOKENS.has(unitKey(m[2]))) return { value: m[1].trim(), unit: m[2].trim() };
+  // b) a DIMENSION-style value that ends in one unit — "997 x 799 x 790 mm" → "997 x 799 x 790" + mm.
+  //    The part before the unit must be purely numeric + dimension separators (digits, ×/x, /, +, -, .,
+  //    spaces), so multi-unit specs ("400 V 3N+T 50 Hz") and worded values ("CEILING MOUNTED",
+  //    "Type C") are left intact. Only a recognised MULTI-char unit is peeled.
+  m = v.match(/^([\d\s.,×xX/+\-–—]*\d)\s+([A-Za-zµ³²]{2,})$/);
   if (m && UNIT_TOKENS.has(unitKey(m[2]))) return { value: m[1].trim(), unit: m[2].trim() };
   return { value: v, unit: null };
 }
