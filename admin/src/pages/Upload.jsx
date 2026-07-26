@@ -241,10 +241,21 @@ function FolderUpload({ onDone }) {
 /* ---------------- Single / multi PDF upload — sequential queue ---------------- */
 const ST = {
   queued: { label: "Queued", bg: "#f1f5f9", fg: "#64748b" },
+  uploading: { label: "Uploading…", bg: "#fef3e2", fg: "#d97706" },
   extracting: { label: "Extracting…", bg: "#e6f3fb", fg: "#0284c7" },
   done: { label: "Done ✓", bg: "#e7f6f0", fg: "#059669" },
   failed: { label: "Failed", bg: "#fdecef", fg: "#e11d48" },
 };
+// Turn raw browser/network errors into something an operator can act on.
+function clarifyError(e) {
+  const m = e && e.message ? e.message : String(e || "Failed");
+  if (/failed to fetch|networkerror|load failed|network request failed/i.test(m)) {
+    return "Network error — the connection dropped or timed out. Check your internet and retry this file.";
+  }
+  if (/413|payload too large|entity too large/i.test(m)) return "File too large for the upload — retry (this path should avoid the size limit).";
+  if (/quota|billing|insufficient/i.test(m)) return "AI quota exceeded on the OpenAI account — add credits, then retry.";
+  return m;
+}
 function StatusChip({ s, error }) {
   const c = ST[s] || ST.queued;
   return (
@@ -275,12 +286,18 @@ function SingleUpload({ onDone }) {
     const q = files.map((f) => ({ name: f.name, status: "queued", entryId: null, error: null }));
     setQueue(q.map((x) => ({ ...x })));
     for (let i = 0; i < files.length; i++) {
-      q[i].status = "extracting"; setQueue(q.map((x) => ({ ...x })));
+      const file = files[i];
       try {
-        const r = await api.uploadPdf([files[i]], [types[i]]); // one file = one model = one short request
+        // 1) upload the PDF DIRECTLY to storage — any size, bypasses the serverless request-body limit
+        q[i].status = "uploading"; setQueue(q.map((x) => ({ ...x })));
+        const { storage_path, signed_url } = await api.getPdfUploadUrl(file.name);
+        await api.putToSignedUrl(signed_url, file);
+        // 2) extract from storage — a small request that finishes before the next file begins
+        q[i].status = "extracting"; setQueue(q.map((x) => ({ ...x })));
+        const r = await api.extractPdfFromStorage(storage_path, file.name, types[i]);
         q[i].status = "done"; q[i].entryId = r?.draft?.entry_id || null;
       } catch (e) {
-        q[i].status = "failed"; q[i].error = e?.message || "Extraction failed";
+        q[i].status = "failed"; q[i].error = clarifyError(e);
       }
       setQueue(q.map((x) => ({ ...x })));
     }

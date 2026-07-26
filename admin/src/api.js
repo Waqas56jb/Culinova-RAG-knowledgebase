@@ -114,6 +114,14 @@ export const api = {
     fd.append("doc_types", JSON.stringify(docTypes));
     return f(`/api/ingest/pdf`, { method: "POST", body: fd });
   },
+  // Large-safe PDF path: ask for a signed URL, upload the file DIRECTLY to Supabase Storage (bypasses
+  // the serverless ~4.5 MB request-body limit), then extract from storage. Used by the Import queue.
+  getPdfUploadUrl: (fileName) => jf(`/api/ingest/pdf-upload-url`, { file_name: fileName }),
+  putToSignedUrl: async (signedUrl, file) => {
+    const res = await fetch(signedUrl, { method: "PUT", headers: { "content-type": file.type || "application/pdf", "x-upsert": "true" }, body: file });
+    if (!res.ok) { let m = `HTTP ${res.status}`; try { m = (await res.text()) || m; } catch {} throw new Error(`Upload to storage failed (${m})`); }
+  },
+  extractPdfFromStorage: (storage_path, file_name, doc_type) => jf(`/api/ingest/pdf-from-storage`, { storage_path, file_name, doc_type }),
   uploadFolder: (list) => {
     const fd = new FormData();
     const paths = [];

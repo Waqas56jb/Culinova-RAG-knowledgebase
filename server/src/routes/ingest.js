@@ -5,7 +5,7 @@ const crypto = require("crypto");
 const { supabase } = require("../config/supabase");
 const { extractPages } = require("../services/pdf");
 const { extractFromPdf } = require("../services/extraction");
-const { uploadPdf, uploadBuffer } = require("../services/storage");
+const { uploadPdf, uploadBuffer, ensureBucket, urlForKey, BUCKET } = require("../services/storage");
 const { ingestModelFiles } = require("../services/ingestModel");
 const { extractMainImage, renderPages } = require("../services/pdfImage");
 const XLSX = require("xlsx");
@@ -75,6 +75,45 @@ function mergeModel(results) {
     }
   }
   return merged;
+}
+
+/**
+ * Extract + persist ONE PDF (already stored at storageUrl) as its own equipment model. Shared by the
+ * storage-based upload path so a large PDF never has to travel through the serverless request body —
+ * Vercel caps that at ~4.5 MB, which is exactly why big datasheets failed with "Failed to fetch".
+ */
+async function ingestOnePdf({ buffer, fileName, docType, storageUrl, user }) {
+  const label = DOC_LABELS[docType] || "Document";
+  let numpages = 0;
+  try { ({ numpages } = await extractPages(buffer)); } catch { numpages = 0; }
+
+  const { data: docRow, error: docErr } = await supabase
+    .from("ceks_import_documents")
+    .insert({ file_name: fileName, doc_type: docType, storage_url: storageUrl, page_count: numpages, status: "extracting" })
+    .select().single();
+  if (docErr) throw new Error(docErr.message);
+
+  const extracted = await extractFromPdf(buffer, label, fileName);
+  await supabase.from("ceks_import_documents").update({ status: "extracted" }).eq("id", docRow.id);
+
+  const attributes = (extracted.attributes || []).map((a) => ({ ...a, source_document: label, source_document_id: docRow.id }));
+  const notes = (extracted.notes || []).map((n) => ({ ...n, source_document: label }));
+  const model = { ...(extracted.model || {}), source_file: fileName };
+  const draft = await persistDraft({ model, attributes, notes, origin: "ai_pdf" });
+  await supabase.from("ceks_import_documents").update({ knowledge_entry_id: draft.entry_id }).eq("id", docRow.id);
+
+  // product image: embedded raster → else render page 1 (a record is never left image-less; guarded on throw)
+  try {
+    if (draft?.model?.id) {
+      let buf = null;
+      try { const img = await extractMainImage(buffer); if (img?.buffer) buf = img.buffer; } catch (e) { console.warn("[ingest] embedded image:", e.message); }
+      if (!buf) { try { const r = await renderPages(buffer, { maxPages: 1 }); buf = r[0] || null; } catch (e) { console.warn("[ingest] render image fallback:", e.message); } }
+      if (buf) { const url = await uploadBuffer(`images/${draft.model.id}.png`, buf, "image/png"); await supabase.from("ceks_models").update({ image_url: url }).eq("id", draft.model.id); }
+    }
+  } catch (e) { console.warn("[ingest] image step:", e.message); }
+
+  const engine = await autoApplyRules(draft.entry_id, user);
+  return { draft, engine, documents: [{ id: docRow.id, label }] };
 }
 
 /**
@@ -195,6 +234,46 @@ router.post("/pdf", canIngest, upload.array("files", 10), async (req, res) => {
     console.error("[ingest/pdf]", err);
     const status = err.status || 500;
     res.status(status).json({ error: err.message || "PDF extraction failed." });
+  }
+});
+
+/**
+ * POST /api/ingest/pdf-upload-url   { file_name } → { storage_path, signed_url }
+ * The client uploads the PDF DIRECTLY to Supabase Storage with signed_url — bypassing the serverless
+ * request-body limit (Vercel rejects bodies over ~4.5 MB, which is why large PDFs "Failed to fetch").
+ */
+router.post("/pdf-upload-url", canIngest, express.json(), async (req, res) => {
+  try {
+    const safe = String(req.body?.file_name || "document.pdf").replace(/[^\w.\-]+/g, "_").slice(-80) || "document.pdf";
+    const key = `pdfs/${crypto.randomUUID()}-${safe}`;
+    await ensureBucket();
+    const { data, error } = await supabase.storage.from(BUCKET).createSignedUploadUrl(key);
+    if (error) throw new Error(error.message);
+    res.json({ storage_path: key, signed_url: data.signedUrl });
+  } catch (e) {
+    console.error("[ingest/pdf-upload-url]", e);
+    res.status(500).json({ error: e.message || "Could not create upload URL." });
+  }
+});
+
+/**
+ * POST /api/ingest/pdf-from-storage   { storage_path, file_name, doc_type }
+ * Extract a PDF the client already uploaded to storage. The request body is tiny JSON (no size limit);
+ * the backend downloads the file and runs the SAME extraction as /pdf. One PDF = one equipment model.
+ */
+router.post("/pdf-from-storage", canIngest, express.json(), async (req, res) => {
+  try {
+    const { storage_path, file_name, doc_type } = req.body || {};
+    if (!storage_path) return res.status(400).json({ error: "storage_path is required" });
+    const { data, error } = await supabase.storage.from(BUCKET).download(storage_path);
+    if (error || !data) return res.status(404).json({ error: "The uploaded file was not found in storage — please retry the upload." });
+    const buffer = Buffer.from(await data.arrayBuffer());
+    const storageUrl = await urlForKey(storage_path);
+    const out = await ingestOnePdf({ buffer, fileName: file_name || "document.pdf", docType: doc_type || "datasheet", storageUrl, user: req.user });
+    res.json({ ok: true, ...out });
+  } catch (e) {
+    console.error("[ingest/pdf-from-storage]", e);
+    res.status(e.status || 500).json({ error: e.message || "PDF extraction failed." });
   }
 });
 
