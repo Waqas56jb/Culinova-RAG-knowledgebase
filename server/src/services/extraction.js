@@ -158,6 +158,19 @@ async function extractFromImages(pageImages, docLabel, sourceFileName = "") {
   if (!pageImages || !pageImages.length) {
     throw Object.assign(new Error("No page images to read."), { status: 422 });
   }
+  // Read EVERY page. High-detail images are large, so a long scanned sheet is read in page batches and
+  // the results merged — no page is ever left unseen (a single call used to silently ignore later pages).
+  const BATCH = 4;
+  if (pageImages.length <= BATCH) return extractImageBatch(pageImages, 0, docLabel, sourceFileName);
+  let acc = { model: {}, attributes: [], notes: [] };
+  for (let i = 0; i < pageImages.length; i += BATCH) {
+    const part = await extractImageBatch(pageImages.slice(i, i + BATCH), i, docLabel, sourceFileName);
+    acc = mergeExtractions(acc, part, { preferVisionIdentity: !String(acc.model.model_number || "").trim() });
+  }
+  return acc;
+}
+
+async function extractImageBatch(pageImages, pageOffset, docLabel, sourceFileName) {
   const fileHint = sourceFileName
     ? `The source file is named "${sourceFileName}". Manufacturers often name a file after the model, ` +
       `but rely on what you can READ in the image; never contradict the printed text.\n`
@@ -169,14 +182,17 @@ async function extractFromImages(pageImages, docLabel, sourceFileName = "") {
         `Document type: ${docLabel}. This document has little or no machine-readable text — it is a ` +
         `technical drawing or scanned datasheet. READ THE IMAGES like an engineer: the brand, model ` +
         `number and specifications are printed in headers, title blocks and callouts. Extract every ` +
-        `value you can actually see, following the schema. ${fileHint}` +
+        `value you can actually see, following the schema. Set source_page to the page number labelled ` +
+        `before each image. ${fileHint}` +
         `The model_number is usually the most prominent code near the product name or in the header.`,
     },
-    ...pageImages.map((buf) => ({
-      type: "image_url",
-      image_url: { url: `data:image/png;base64,${buf.toString("base64")}`, detail: "high" },
-    })),
   ];
+  // Label each image with its real page number so source_page is authoritative (vision cannot otherwise
+  // know page numbers, so click-to-source used to land on the wrong page).
+  pageImages.forEach((buf, idx) => {
+    content.push({ type: "text", text: `Page ${pageOffset + idx + 1}:` });
+    content.push({ type: "image_url", image_url: { url: `data:image/png;base64,${buf.toString("base64")}`, detail: "high" } });
+  });
 
   const resp = await callOpenAI([
     { role: "system", content: SYSTEM_PROMPT },
@@ -195,25 +211,61 @@ async function extractFromImages(pageImages, docLabel, sourceFileName = "") {
  *
  * @param {Buffer} pdfBuffer  the raw PDF
  */
+// A file-name stem, normalized for comparison ("PL30_datasheet.pdf" -> "pl30datasheet").
+const fileStem = (name) => String(name || "").split(/[\\/]/).pop().replace(/\.[^.]+$/, "").trim();
+const normKey = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+
+/**
+ * Is `s` plausibly a real model number, not a certification code / barcode / URL / the word
+ * "Datasheet"? A wrong-but-non-empty model must NEVER be accepted as the identity — when this returns
+ * false we escalate to vision instead of trusting the text pass.
+ */
+function looksLikeModel(s) {
+  const v = String(s || "").trim();
+  if (!v || v.length < 2) return false;
+  if (/^\d{8,14}$/.test(v)) return false;                                  // EAN / barcode / long pure number
+  if (/https?:\/\/|www\.|@/.test(v)) return false;                          // URL / email
+  if (/^\+?[\d\s()\-]{7,}$/.test(v)) return false;                          // phone number
+  if (/^(datasheet|specification|spec\s*sheet|technical\s*data|manual|catalogue|catalog|product|model)$/i.test(v)) return false;
+  if (/^(iec|en|ce|ul|nsf|iso|din|ip)\s?\d/i.test(v)) return false;         // bare certification / rating code
+  return true;
+}
+
 async function extractFromPdf(pdfBuffer, docLabel, sourceFileName = "") {
   const { extractPages } = require("./pdf");
   const { renderPages } = require("./pdfImage");
 
   let pages = [];
   try { ({ pages } = await extractPages(pdfBuffer)); } catch { pages = []; }
-  const textLen = String((pages || []).join(" ")).replace(/\s+/g, "").length;
+  const perPage = (pages || []).map((p) => String(p || "").replace(/\s+/g, "").length);
+  const textLen = perPage.reduce((s, n) => s + n, 0);
+  const pageCount = perPage.length || 1;
 
   // Enough real text to trust the fast path? (dimension-only sheets fall well below this.)
   const THIN_TEXT = 400;
+  // A HYBRID sheet mixes rich text pages with near-empty image/scan pages — those image pages carry
+  // specs the text pass can never see, so it must ALSO be read with vision (client cannot lose specs).
+  const looksHybrid = pageCount > 1 && perPage.some((n) => n >= 200) && perPage.some((n) => n < 60);
+
   if (textLen >= THIN_TEXT) {
     const fromText = await extractFromPages(pages, docLabel, sourceFileName);
-    if (String(fromText?.model?.model_number || "").trim()) return fromText;
-    // text was rich but the identity is missing — the model is probably in a graphic; let vision try
+    const modelNo = String(fromText?.model?.model_number || "").trim();
+    const modelPlausible = looksLikeModel(modelNo);                                   // not an EAN/URL/cert/"Datasheet"
+    const modelFromFilename = !!modelNo && normKey(modelNo) === normKey(fileStem(sourceFileName));
+    // Gray zone: barely over the text threshold with implausibly few attributes for the page count.
+    const thinExtraction = textLen < 1500 && (fromText?.attributes?.length || 0) < Math.max(4, pageCount * 3);
+
+    // Trust the fast path only for a RICH sheet with a plausible printed model. A thin sheet, an
+    // implausible model, or a hybrid (image spec-pages) all get a second look with vision.
+    if (modelPlausible && !looksHybrid && !thinExtraction) return fromText;
     try {
       const images = await renderPages(pdfBuffer);
       const fromVision = await extractFromImages(images, docLabel, sourceFileName);
-      // keep the richer text attributes, but take the model identity vision could read
-      return mergeExtractions(fromText, fromVision);
+      // Let vision OWN the identity only when the text identity is untrustworthy — implausible, or it
+      // merely echoes the file name on a thin sheet (so it likely came from the file name, not the page).
+      // For a plausible text model on a hybrid sheet, keep it and just gain vision's extra attributes.
+      const distrustTextIdentity = !modelPlausible || (modelFromFilename && thinExtraction);
+      return mergeExtractions(fromText, fromVision, { preferVisionIdentity: distrustTextIdentity });
     } catch (e) {
       console.warn(`[extraction] vision escalation skipped: ${e.message}`);
       return fromText;
@@ -226,11 +278,18 @@ async function extractFromPdf(pdfBuffer, docLabel, sourceFileName = "") {
   return extractFromImages(images, docLabel, sourceFileName);
 }
 
-/** Prefer vision's identity, keep the union of attributes/notes. */
-function mergeExtractions(base, extra) {
+/**
+ * Merge two extractions, keeping the UNION of attributes/notes.
+ * `preferVisionIdentity` (default true): for a graphic/scan sheet vision is the ground truth, so its
+ * identity fields overwrite the base; when false (the text identity was already trustworthy) vision
+ * only fills gaps. This makes the code match its long-stated intent — vision is not a mere gap-filler.
+ */
+function mergeExtractions(base, extra, { preferVisionIdentity = true } = {}) {
   const model = { ...(base.model || {}) };
   for (const k of ["brand", "model_number", "category", "equipment_type", "series", "power_type", "display_name", "description"]) {
-    if (!String(model[k] || "").trim() && String(extra?.model?.[k] || "").trim()) model[k] = extra.model[k];
+    const bv = String(model[k] || "").trim();
+    const ev = String(extra?.model?.[k] || "").trim();
+    if (ev && (preferVisionIdentity || !bv)) model[k] = extra.model[k];
   }
   return {
     model,
@@ -245,6 +304,9 @@ async function callOpenAI(messages) {
     return await getOpenAI().chat.completions.create({
       model: env.extractionModel,
       temperature: 0,
+      // Give a dense datasheet enough room to return every attribute. Without this the response can hit
+      // the model's default output ceiling, get cut mid-JSON, and fail the whole extraction.
+      max_tokens: 16000,
       response_format: { type: "json_schema", json_schema: EXTRACTION_SCHEMA },
       messages,
     });
@@ -274,8 +336,26 @@ async function callOpenAI(messages) {
 }
 
 function parseExtraction(resp) {
-  const raw = resp.choices[0]?.message?.content || "{}";
-  const parsed = JSON.parse(raw);
+  const choice = resp.choices?.[0];
+  const msg = choice?.message;
+  // A refusal returns content:null with a refusal string — never silently treat it as an empty draft.
+  if (msg?.refusal) {
+    throw Object.assign(new Error(`The AI declined to extract this document: ${msg.refusal}`), { status: 422 });
+  }
+  // A truncated response ("length") is cut mid-JSON — fail loudly instead of crashing on JSON.parse.
+  if (choice?.finish_reason === "length") {
+    throw Object.assign(
+      new Error("The datasheet produced more data than one pass allows (the response was truncated). Split the PDF into fewer pages and retry."),
+      { status: 502 },
+    );
+  }
+  const raw = msg?.content || "{}";
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (e) {
+    throw Object.assign(new Error(`Extraction returned malformed JSON and could not be read (${e.message}).`), { status: 502 });
+  }
   parsed.attributes = parsed.attributes || [];
   parsed.notes = parsed.notes || [];
   parsed.model = parsed.model || {};

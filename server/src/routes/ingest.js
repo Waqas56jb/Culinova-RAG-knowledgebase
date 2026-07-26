@@ -7,7 +7,7 @@ const { extractPages } = require("../services/pdf");
 const { extractFromPdf } = require("../services/extraction");
 const { uploadPdf, uploadBuffer } = require("../services/storage");
 const { ingestModelFiles } = require("../services/ingestModel");
-const { extractMainImage } = require("../services/pdfImage");
+const { extractMainImage, renderPages } = require("../services/pdfImage");
 const XLSX = require("xlsx");
 const { importWorkbook, buildTemplateBuffer } = require("../services/excelImport");
 const productCatalog = require("../services/productCatalogImport");
@@ -61,8 +61,14 @@ function mergeModel(results) {
   // Merge the FULL identity set the downstream consumers use (draft.js / entry.power_type). Missing
   // series + power_type here meant a PDF-imported model lost both, while the folder path kept them.
   const keys = ["category", "equipment_type", "brand", "series", "model_number", "power_type", "display_name", "description"];
+  // The datasheet is authoritative — take ITS identity as a unit, then fill only the gaps from other
+  // documents. Merging each field independently could pair a brand from one file with a model number
+  // from another (a Frankenstein identity) when several PDFs are uploaded together.
+  const ds = results.find((r) => r.docType === "datasheet") || results[0];
   const merged = {};
   for (const k of keys) {
+    const dv = ds?.result?.model && ds.result.model[k];
+    if (dv) { merged[k] = dv; continue; }
     for (const r of results) {
       const v = r.result.model && r.result.model[k];
       if (v) { merged[k] = v; break; }
@@ -84,36 +90,49 @@ router.post("/pdf", canIngest, upload.array("files", 10), async (req, res) => {
     try { docTypes = JSON.parse(req.body.doc_types || "[]"); } catch { docTypes = []; }
 
     const results = [];
+    const fileErrors = [];
     for (let i = 0; i < req.files.length; i++) {
       const file = req.files[i];
       const docType = docTypes[i] || "datasheet";
       const label = DOC_LABELS[docType] || "Document";
+      // One bad file must NOT sink the whole upload — extract each independently and report failures.
+      let docRow = null;
+      try {
+        // store the PDF in Supabase Storage so the reviewer can open the source page
+        const fileId = crypto.randomUUID();
+        const storageUrl = await uploadPdf(fileId, file.buffer);
 
-      // store the PDF in Supabase Storage so the reviewer can open the source page
-      const fileId = crypto.randomUUID();
-      const storageUrl = await uploadPdf(fileId, file.buffer);
+        let numpages = 0;
+        try { ({ numpages } = await extractPages(file.buffer)); } catch { numpages = 0; }
 
-      const { pages, numpages } = await extractPages(file.buffer);
+        const doc = await supabase
+          .from("ceks_import_documents")
+          .insert({
+            file_name: file.originalname,
+            doc_type: docType,
+            storage_url: storageUrl,
+            page_count: numpages,
+            status: "extracting",
+          })
+          .select()
+          .single();
+        if (doc.error) throw new Error(doc.error.message);
+        docRow = doc.data;
 
-      const doc = await supabase
-        .from("ceks_import_documents")
-        .insert({
-          file_name: file.originalname,
-          doc_type: docType,
-          storage_url: storageUrl,
-          page_count: numpages,
-          status: "extracting",
-        })
-        .select()
-        .single();
-      if (doc.error) throw new Error(doc.error.message);
+        // extractFromPdf reads text first and automatically escalates to VISION on drawing/scanned
+        // sheets whose model number is printed in a graphic (e.g. "Pelapatate PL30") rather than text.
+        const extracted = await extractFromPdf(file.buffer, label, file.originalname);
+        await supabase.from("ceks_import_documents").update({ status: "extracted" }).eq("id", docRow.id);
 
-      // extractFromPdf reads text first and automatically escalates to VISION on drawing/scanned
-      // sheets whose model number is printed in a graphic (e.g. "Pelapatate PL30") rather than text.
-      const extracted = await extractFromPdf(file.buffer, label, file.originalname);
-      await supabase.from("ceks_import_documents").update({ status: "extracted" }).eq("id", doc.data.id);
-
-      results.push({ docId: doc.data.id, label, docType, buffer: file.buffer, result: extracted });
+        results.push({ docId: docRow.id, label, docType, buffer: file.buffer, result: extracted });
+      } catch (e) {
+        console.warn(`[ingest/pdf] "${file.originalname}" failed: ${e.message}`);
+        if (docRow) await supabase.from("ceks_import_documents").update({ status: "failed" }).eq("id", docRow.id);
+        fileErrors.push({ file: file.originalname, error: e.message });
+      }
+    }
+    if (!results.length) {
+      return res.status(502).json({ error: `Extraction failed for every uploaded file — ${fileErrors.map((f) => `${f.file}: ${f.error}`).join("; ")}` });
     }
 
     // merge attributes/notes across documents, tagging each with its source
@@ -137,21 +156,41 @@ router.post("/pdf", canIngest, upload.array("files", 10), async (req, res) => {
     // link the uploaded documents to the entry (so they appear under Related Documents)
     await supabase.from("ceks_import_documents").update({ knowledge_entry_id: draft.entry_id }).in("id", results.map((r) => r.docId));
 
-    // extract the product image from the datasheet PDF (fall back to the first PDF)
+    // ALWAYS end with a product image. Try each uploaded PDF's embedded raster (datasheet first); if
+    // none has one — a vector-drawn or fully-scanned datasheet — RENDER its first page as the image, so
+    // a record is never left with no picture. Every step is guarded; the fallback runs even on a throw.
     try {
-      const src = results.find((r) => r.docType === "datasheet") || results[0];
-      if (src) {
-        const extractedImg = await extractMainImage(src.buffer);
-        if (extractedImg) {
-          const url = await uploadBuffer(`images/${draft.model.id}.png`, extractedImg.buffer, "image/png");
+      if (draft?.model?.id) {
+        const ordered = [results.find((r) => r.docType === "datasheet"), ...results].filter(Boolean);
+        const tried = new Set();
+        let buf = null;
+        for (const src of ordered) {
+          if (tried.has(src.docId)) continue;
+          tried.add(src.docId);
+          try { const img = await extractMainImage(src.buffer); if (img?.buffer) { buf = img.buffer; break; } }
+          catch (e) { console.warn("[ingest/pdf] embedded image read:", e.message); }
+        }
+        if (!buf) {
+          const src = results.find((r) => r.docType === "datasheet") || results[0];
+          try { const rendered = await renderPages(src.buffer, { maxPages: 1 }); buf = rendered[0] || null; }
+          catch (e) { console.warn("[ingest/pdf] page-render image fallback:", e.message); }
+        }
+        if (buf) {
+          const url = await uploadBuffer(`images/${draft.model.id}.png`, buf, "image/png");
           await supabase.from("ceks_models").update({ image_url: url }).eq("id", draft.model.id);
         }
       }
-    } catch (e) { console.warn("[ingest/pdf] image extraction:", e.message); }
+    } catch (e) { console.warn("[ingest/pdf] image step:", e.message); }
 
     const engine = await autoApplyRules(draft.entry_id, req.user);
 
-    res.json({ ok: true, draft, engine, documents: results.map((r) => ({ id: r.docId, label: r.label })) });
+    res.json({
+      ok: true,
+      draft,
+      engine,
+      documents: results.map((r) => ({ id: r.docId, label: r.label })),
+      ...(fileErrors.length ? { warnings: fileErrors } : {}),
+    });
   } catch (err) {
     console.error("[ingest/pdf]", err);
     const status = err.status || 500;

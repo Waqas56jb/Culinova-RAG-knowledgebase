@@ -61,11 +61,15 @@ async function extractMainImage(pdfBuffer, { maxPages = 3, minDim = 120 } = {}) 
       }
     }
     for (const name of names) {
-      const img = await new Promise((resolve) => {
-        try { page.objs.get(name, resolve); } catch { resolve(null); }
-      }).catch(() => null);
+      // page.objs.get fires its callback when the object resolves; if an object never resolves the
+      // promise would hang forever (and never reject) — race it against a timeout so we skip and move on.
+      const img = await Promise.race([
+        new Promise((resolve) => { try { page.objs.get(name, resolve); } catch { resolve(null); } }),
+        new Promise((resolve) => setTimeout(() => resolve(null), 5000)),
+      ]).catch(() => null);
       if (!img || !img.width || !img.height || !img.data) continue;
-      if (img.width < minDim || img.height < minDim) continue; // skip logos/icons
+      if (img.width < minDim || img.height < minDim) continue;   // skip logos/icons
+      if (img.width > 5000 || img.height > 5000) continue;         // skip huge scans (OOM); the page-render fallback covers these
       const area = img.width * img.height;
       // prefer larger, and earlier pages (slight bias)
       const score = area / p;
@@ -92,7 +96,7 @@ async function extractMainImage(pdfBuffer, { maxPages = 3, minDim = 120 } = {}) 
  *
  * @returns {Promise<Buffer[]>} one PNG buffer per rendered page
  */
-async function renderPages(pdfBuffer, { maxPages = 4, scale = 2.0, maxDim = 2200 } = {}) {
+async function renderPages(pdfBuffer, { maxPages = 12, scale = 2.5, maxDim = 3000 } = {}) {
   const pdfjs = getPdfjs();
   // @napi-rs/canvas is a prebuilt native canvas — no build step, works headless in Node.
   const { createCanvas } = require("@napi-rs/canvas");
