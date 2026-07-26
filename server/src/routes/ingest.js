@@ -392,26 +392,50 @@ router.post("/excel", canIngest, upload.single("file"), async (req, res) => {
   }
 });
 
-/** POST /api/ingest/image/:entryId  (multipart: image) — manually set/replace the product image */
-router.post("/image/:entryId", canEdit, upload.single("image"), async (req, res) => {
-  try {
-    if (!req.file) return res.status(400).json({ error: "No image uploaded." });
-    const { data: link } = await supabase
-      .from("ceks_knowledge_links")
-      .select("scope_id")
-      .eq("knowledge_entry_id", req.params.entryId)
-      .eq("scope_type", "model")
-      .limit(1);
-    if (!link || !link[0]) return res.status(404).json({ error: "Model not found." });
-    const modelId = link[0].scope_id;
-    const ext = (req.file.originalname.split(".").pop() || "png").toLowerCase();
-    const url = await uploadBuffer(`images/${modelId}-${Date.now()}.${ext}`, req.file.buffer, req.file.mimetype || "image/png");
-    await supabase.from("ceks_models").update({ image_url: url }).eq("id", modelId);
-    res.json({ ok: true, image_url: url });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
+/**
+ * POST /api/ingest/image/:entryId — manually set/replace the product image.
+ * Accepts EITHER a small multipart file (field "image") OR a JSON body { storage_path } for an image
+ * the client already uploaded direct-to-storage (so a large photo isn't blocked by the ~4.5 MB
+ * serverless request-body limit — the same limit that blocked large PDFs).
+ */
+router.post(
+  "/image/:entryId",
+  canEdit,
+  (req, res, next) => (req.is("application/json") ? express.json()(req, res, next) : upload.single("image")(req, res, next)),
+  async (req, res) => {
+    try {
+      const { data: link } = await supabase
+        .from("ceks_knowledge_links")
+        .select("scope_id")
+        .eq("knowledge_entry_id", req.params.entryId)
+        .eq("scope_type", "model")
+        .limit(1);
+      if (!link || !link[0]) return res.status(404).json({ error: "Model not found." });
+      const modelId = link[0].scope_id;
+
+      let buffer, contentType, ext;
+      if (req.body && req.body.storage_path) {
+        const { data, error } = await supabase.storage.from(BUCKET).download(req.body.storage_path);
+        if (error || !data) return res.status(404).json({ error: "The uploaded image was not found in storage — please retry." });
+        buffer = Buffer.from(await data.arrayBuffer());
+        contentType = req.body.content_type || "image/png";
+        ext = String(req.body.file_name || "image.png").split(".").pop().toLowerCase();
+      } else if (req.file) {
+        buffer = req.file.buffer;
+        contentType = req.file.mimetype || "image/png";
+        ext = (req.file.originalname.split(".").pop() || "png").toLowerCase();
+      } else {
+        return res.status(400).json({ error: "No image uploaded." });
+      }
+
+      const url = await uploadBuffer(`images/${modelId}-${Date.now()}.${ext}`, buffer, contentType);
+      await supabase.from("ceks_models").update({ image_url: url }).eq("id", modelId);
+      res.json({ ok: true, image_url: url });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  },
+);
 
 /** POST /api/ingest/manual  { model, attributes, notes } */
 router.post("/manual", canIngest, express.json({ limit: "2mb" }), async (req, res) => {

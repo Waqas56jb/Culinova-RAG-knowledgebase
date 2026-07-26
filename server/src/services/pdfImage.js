@@ -42,47 +42,65 @@ function toPngBuffer(img) {
  * as a PNG buffer (largest area, above a minimum size, from the earliest pages).
  * Returns { buffer, width, height } or null.
  */
-async function extractMainImage(pdfBuffer, { maxPages = 3, minDim = 120 } = {}) {
+// maxPages defaults to 1: the product photo is on page 1 of a datasheet, and decoding the many
+// technical diagrams on later pages added 15 s+ per page for no benefit. Page 1's own header logo is
+// rejected by the aspect-ratio filter, so the real photo still wins.
+async function extractMainImage(pdfBuffer, { maxPages = 1, minDim = 110 } = {}) {
   const pdfjs = getPdfjs();
+  const OPS = pdfjs.OPS;
   const doc = await pdfjs.getDocument({ data: new Uint8Array(pdfBuffer), disableFontFace: true, isEvalSupported: false }).promise;
   const pages = Math.min(doc.numPages, maxPages);
-  let best = null;
+  let best = null; // { img, w, h, score } — the RAW image; PNG-encoded only ONCE, at the very end
+
+  // Weigh a candidate raster: keep the largest, roughly-photo-shaped image on the earliest page.
+  // Extreme aspect ratios are banners / rules / dividers, not a product photo, so they are skipped —
+  // this is what stops a full-width header logo from being chosen as the product image.
+  const consider = (img, p) => {
+    if (!img || !img.width || !img.height || !img.data) return;
+    const w = img.width, h = img.height;
+    if (w < minDim || h < minDim) return;            // logos / icons
+    if (w > 5000 || h > 5000) return;                // huge scans → the page-render fallback covers these
+    const ar = w / h;
+    if (ar > 3.5 || ar < 1 / 3.5) return;            // banner / rule, not a product shot
+    const shape = 1 - Math.min(0.6, Math.abs(Math.log(ar)) * 0.35); // prefer square-ish over stretched
+    const score = (w * h * shape) / p;               // bigger + squarer + earlier page = better
+    // Only TRACK the winner here — encoding every transient "best" to PNG re-serialised megapixel
+    // bitmaps over and over and made image extraction take 40 s+ on image-heavy datasheets.
+    if (!best || score > best.score) best = { img, w, h, score };
+  };
 
   for (let p = 1; p <= pages; p++) {
     const page = await doc.getPage(p);
     const ops = await page.getOperatorList();
-    const OPS = pdfjs.OPS;
     const names = [];
     for (let i = 0; i < ops.fnArray.length; i++) {
       const fn = ops.fnArray[i];
       if (fn === OPS.paintImageXObject || fn === OPS.paintJpegXObject || fn === OPS.paintImageXObjectRepeat) {
         const arg = ops.argsArray[i][0];
         if (typeof arg === "string") names.push(arg);
+      } else if (fn === OPS.paintInlineImageXObject) {
+        // an INLINE image carries its bitmap right in the op args (no objs.get) — many datasheets draw
+        // the product photo this way, so missing it forced the ugly page-render fallback.
+        consider(ops.argsArray[i][0], p);
       }
     }
     for (const name of names) {
-      // page.objs.get fires its callback when the object resolves; if an object never resolves the
-      // promise would hang forever (and never reject) — race it against a timeout so we skip and move on.
+      // page.objs.get fires its callback when the object resolves; if it never resolves the promise
+      // would hang forever (and never reject) — race it against a timeout so we skip and move on.
       const img = await Promise.race([
         new Promise((resolve) => { try { page.objs.get(name, resolve); } catch { resolve(null); } }),
         new Promise((resolve) => setTimeout(() => resolve(null), 5000)),
       ]).catch(() => null);
-      if (!img || !img.width || !img.height || !img.data) continue;
-      if (img.width < minDim || img.height < minDim) continue;   // skip logos/icons
-      if (img.width > 5000 || img.height > 5000) continue;         // skip huge scans (OOM); the page-render fallback covers these
-      const area = img.width * img.height;
-      // prefer larger, and earlier pages (slight bias)
-      const score = area / p;
-      if (!best || score > best.score) {
-        const buffer = toPngBuffer(img);
-        if (buffer) best = { buffer, width: img.width, height: img.height, score };
-      }
+      consider(img, p);
     }
     page.cleanup();
-    if (best && p >= 1) break; // first page with a good image usually holds the product photo
+    // Do NOT stop at the first page: a page-1 header logo must not mask the real product photo that
+    // lives on a later page — evaluate every candidate page and keep the best-scoring one.
   }
   await doc.cleanup();
-  return best ? { buffer: best.buffer, width: best.width, height: best.height } : null;
+  if (!best) return null;
+  const buffer = toPngBuffer(best.img); // encode the winner exactly once
+  return buffer ? { buffer, width: best.w, height: best.h } : null;
 }
 
 /**

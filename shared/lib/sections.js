@@ -58,10 +58,29 @@ export const REQUIRED_FIELDS = {
 
 export const REQ_LABEL = (f) => (typeof f === "string" ? f : f.name);
 export const normName = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+
+// The AI names a field naturally ("Size", "Weight", "Power Load") but a category profile uses its
+// canonical name ("Overall Dimensions", "Machine Weight", "Total Power"). Without knowing these are the
+// same field, the value was extracted yet the profile row showed "Missing". These CURATED, unambiguous
+// equivalence groups fix that. Kept deliberately tight — only clear synonyms, never fuzzy guesses.
+const SYNONYMS = [
+  ["overall dimensions", "dimensions", "size", "overall size", "external dimensions", "unit dimensions"],
+  ["machine weight", "weight", "net weight", "unit weight"],
+  ["total power", "power load", "connected load", "total connected load", "rated power", "power input"],
+  ["operating temperature range", "operating temperature", "temperature range"],
+  ["full load current", "max amp draw", "rated current", "maximum current"],
+  ["required breaker size", "recommended circuit breaker", "circuit breaker size"],
+  ["recommended cable size", "power cable requirements", "cable size"],
+];
+const _synGroup = {};
+SYNONYMS.forEach((group, gi) => group.forEach((t) => { _synGroup[normName(t)] = gi; }));
+
 export const fieldMatch = (attrName, canonical) => {
   const a = normName(attrName), c = normName(canonical);
   if (!a || !c) return false;
-  return a === c || a.startsWith(c) || c.startsWith(a);
+  if (a === c || a.startsWith(c) || c.startsWith(a)) return true;
+  const ga = _synGroup[a], gc = _synGroup[c];   // same equivalence group → same field
+  return ga !== undefined && ga === gc;
 };
 
 // Merge extracted rows against the canonical checklist → complete, ordered

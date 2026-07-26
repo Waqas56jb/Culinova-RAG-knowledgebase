@@ -30,8 +30,25 @@ const TOL_RE = /^\s*(-?\d+(?:[.,]\d+)?)\s*(?:±|\+\/-|\+-)\s*(\d+(?:[.,]\d+)?)\s
 // A single number, optionally prefixed by a BOUND operator we must NOT discard.
 const BOUND_RE = /^\s*(>=|<=|=>|=<|≥|≤|>|<|~|≈|=)?\s*(-?\d+(?:[.,]\d+)?)\s*(.*)$/;
 
+// Turn a human-written number into a machine number WITHOUT corrupting it. The old code did
+// `replace(",", ".")`, which read "1,200 mm" as 1.2 — a 1000× error that then fed the rules engine.
+// Here a comma is only a decimal point when it clearly is one; a thousands grouping is removed.
+function cleanNumber(s) {
+  let v = String(s == null ? "" : s).trim();
+  v = v.replace(/(\d)[  ](?=\d{3}\b)/g, "$1"); // space thousands: "1 200" → "1200"
+  const hasDot = v.includes("."), hasComma = v.includes(",");
+  if (hasDot && hasComma) {
+    // both present → whichever comes LAST is the decimal separator
+    if (v.lastIndexOf(",") > v.lastIndexOf(".")) v = v.replace(/\./g, "").replace(",", "."); // "1.200,5" → 1200.5
+    else v = v.replace(/,/g, ""); // "1,200.5" → 1200.5
+  } else if (hasComma) {
+    if (/^-?\d{1,3}(,\d{3})+$/.test(v)) v = v.replace(/,/g, ""); // "1,200" / "1,200,000" → thousands
+    else v = v.replace(",", "."); // "1,5" → decimal 1.5
+  }
+  return v;
+}
 const num = (s) => {
-  const n = Number(String(s).replace(",", "."));
+  const n = Number(cleanNumber(s));
   return Number.isFinite(n) ? n : null;
 };
 

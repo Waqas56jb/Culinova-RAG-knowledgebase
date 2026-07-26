@@ -284,6 +284,24 @@ async function extractFromPdf(pdfBuffer, docLabel, sourceFileName = "") {
  * identity fields overwrite the base; when false (the text identity was already trustworthy) vision
  * only fills gaps. This makes the code match its long-stated intent — vision is not a mere gap-filler.
  */
+// Drop duplicate rows the text + vision passes both produced (same group + name + value + unit), keeping
+// the higher-confidence copy — otherwise a hybrid sheet showed every spec twice, and identical raw
+// strings could even make the rules engine flag a non-existent "ambiguous" conflict.
+function dedupeAttrs(list) {
+  const seen = new Map();
+  for (const a of list || []) {
+    const key = `${normKey(a.attr_group)}|${normKey(a.name)}|${normKey(a.value)}|${normKey(a.unit)}`;
+    const prev = seen.get(key);
+    if (!prev || (a.confidence ?? 1) > (prev.confidence ?? 1)) seen.set(key, a);
+  }
+  return [...seen.values()];
+}
+function dedupeNotes(list) {
+  const seen = new Map();
+  for (const n of list || []) { const k = normKey(n.content); if (k && !seen.has(k)) seen.set(k, n); }
+  return [...seen.values()];
+}
+
 function mergeExtractions(base, extra, { preferVisionIdentity = true } = {}) {
   const model = { ...(base.model || {}) };
   for (const k of ["brand", "model_number", "category", "equipment_type", "series", "power_type", "display_name", "description"]) {
@@ -293,8 +311,8 @@ function mergeExtractions(base, extra, { preferVisionIdentity = true } = {}) {
   }
   return {
     model,
-    attributes: [...(base.attributes || []), ...(extra?.attributes || [])],
-    notes: [...(base.notes || []), ...(extra?.notes || [])],
+    attributes: dedupeAttrs([...(base.attributes || []), ...(extra?.attributes || [])]),
+    notes: dedupeNotes([...(base.notes || []), ...(extra?.notes || [])]),
   };
 }
 

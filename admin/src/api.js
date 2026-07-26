@@ -146,7 +146,14 @@ export const api = {
   importCancel: (jobId) => jf(`/api/import-jobs/${jobId}/cancel`),
   downloadExcelTemplate: () => download(`/api/ingest/excel-template`),
   uploadManual: (payload) => jf(`/api/ingest/manual`, payload),
-  uploadImage: (entryId, file) => { const fd = new FormData(); fd.append("image", file); return f(`/api/ingest/image/${entryId}`, { method: "POST", body: fd }); },
+  // Replace the product image via direct-to-storage (a signed URL PUT) so a large photo is never
+  // blocked by the serverless body limit — the same path used for large PDFs.
+  uploadImage: async (entryId, file) => {
+    const { storage_path, signed_url } = await jf(`/api/ingest/pdf-upload-url`, { file_name: file.name });
+    const put = await fetch(signed_url, { method: "PUT", headers: { "content-type": file.type || "image/png", "x-upsert": "true" }, body: file });
+    if (!put.ok) throw new Error(`Upload to storage failed (HTTP ${put.status})`);
+    return jf(`/api/ingest/image/${entryId}`, { storage_path, file_name: file.name, content_type: file.type || "image/png" });
+  },
   findDocuments: (id) => f(`/api/entries/${id}/find-documents`),
   // Approved equipment from the EOS Library — used by the Engineering Inbox to pick equipment
   // instead of typing brand/model by hand. Returns approved entries only, by design.
