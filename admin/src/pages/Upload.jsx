@@ -238,42 +238,100 @@ function FolderUpload({ onDone }) {
   );
 }
 
-/* ---------------- Single PDF upload ---------------- */
+/* ---------------- Single / multi PDF upload — sequential queue ---------------- */
+const ST = {
+  queued: { label: "Queued", bg: "#f1f5f9", fg: "#64748b" },
+  extracting: { label: "Extracting…", bg: "#e6f3fb", fg: "#0284c7" },
+  done: { label: "Done ✓", bg: "#e7f6f0", fg: "#059669" },
+  failed: { label: "Failed", bg: "#fdecef", fg: "#e11d48" },
+};
+function StatusChip({ s, error }) {
+  const c = ST[s] || ST.queued;
+  return (
+    <span title={error || ""} style={{ display: "inline-block", padding: "2px 10px", borderRadius: 999, fontSize: 12, fontWeight: 700, background: c.bg, color: c.fg }}>
+      {c.label}{s === "failed" && error ? ` — ${error}` : ""}
+    </span>
+  );
+}
+
 function SingleUpload({ onDone }) {
   const [files, setFiles] = useState([]);
   const [types, setTypes] = useState([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [drag, setDrag] = useState(false);
+  const [queue, setQueue] = useState(null); // null before run; [{name,status,entryId,error}] during/after
 
-  function take(list) { setFiles(list); setTypes(list.map(() => "datasheet")); setError(""); }
+  function take(list) { setFiles(list); setTypes(list.map(() => "datasheet")); setError(""); setQueue(null); }
   function setType(i, val) { setTypes((t) => t.map((x, idx) => (idx === i ? val : x))); }
   function removeFile(i) { setFiles((fs) => fs.filter((_, idx) => idx !== i)); setTypes((t) => t.filter((_, idx) => idx !== i)); }
+
   async function submit() {
     if (!files.length) return;
     setBusy(true); setError("");
-    try { const r = await api.uploadPdf(files, types); onDone(r.draft.entry_id); }
-    catch (e) { setError(e.message); } finally { setBusy(false); }
+    // Extract EXACTLY ONE PDF PER REQUEST, strictly one at a time — the next file starts only after the
+    // current one finishes. Each request is short, so a large batch never times out / "failed to fetch",
+    // and one file failing never stops the rest of the queue.
+    const q = files.map((f) => ({ name: f.name, status: "queued", entryId: null, error: null }));
+    setQueue(q.map((x) => ({ ...x })));
+    for (let i = 0; i < files.length; i++) {
+      q[i].status = "extracting"; setQueue(q.map((x) => ({ ...x })));
+      try {
+        const r = await api.uploadPdf([files[i]], [types[i]]); // one file = one model = one short request
+        q[i].status = "done"; q[i].entryId = r?.draft?.entry_id || null;
+      } catch (e) {
+        q[i].status = "failed"; q[i].error = e?.message || "Extraction failed";
+      }
+      setQueue(q.map((x) => ({ ...x })));
+    }
+    setBusy(false);
   }
+
+  const doneCount = (queue || []).filter((x) => x.status === "done").length;
+  const failCount = (queue || []).filter((x) => x.status === "failed").length;
+  const running = !!queue;
 
   return (
     <div>
-      <p className="muted">Upload one model's PDF(s) and choose the document type for each. Creates a Draft for review.</p>
-      <label className={"dropzone" + (drag ? " drag" : "")}
-        onDragOver={(e) => { e.preventDefault(); setDrag(true); }} onDragLeave={() => setDrag(false)}
-        onDrop={(e) => { e.preventDefault(); setDrag(false); take(Array.from(e.dataTransfer.files || []).filter((f) => f.name.toLowerCase().endsWith(".pdf"))); }}>
-        <input type="file" accept="application/pdf" multiple hidden onChange={(e) => take(Array.from(e.target.files || []))} />
-        <div><strong>Drag & drop PDF(s), or click to choose</strong><div className="muted">One equipment model per upload.</div></div>
-      </label>
-      {files.length > 0 && (
+      <p className="muted">Drop one or more PDFs. Each is extracted on its own, <b>one at a time</b> — when one finishes the next begins, so large batches never time out. Each PDF becomes its own equipment draft.</p>
+      {!running && (
+        <label className={"dropzone" + (drag ? " drag" : "")}
+          onDragOver={(e) => { e.preventDefault(); setDrag(true); }} onDragLeave={() => setDrag(false)}
+          onDrop={(e) => { e.preventDefault(); setDrag(false); take(Array.from(e.dataTransfer.files || []).filter((f) => f.name.toLowerCase().endsWith(".pdf"))); }}>
+          <input type="file" accept="application/pdf" multiple hidden onChange={(e) => take(Array.from(e.target.files || []))} />
+          <div><strong>Drag & drop PDF(s), or click to choose</strong><div className="muted">Each PDF is a separate equipment model.</div></div>
+        </label>
+      )}
+
+      {/* before run: editable file list */}
+      {files.length > 0 && !running && (
         <div className="scroll-x"><table className="grid"><thead><tr><th>File</th><th>Document type</th><th></th></tr></thead>
           <tbody>{files.map((f, i) => (
             <tr key={i}><td>{f.name} <span className="muted">({Math.round(f.size / 1024)} KB)</span></td>
               <td><select value={types[i]} onChange={(e) => setType(i, e.target.value)}>{DOC_TYPES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></td>
               <td className="narrow"><button className="x" onClick={() => removeFile(i)}>×</button></td></tr>))}</tbody></table></div>
       )}
+
+      {/* during / after run: per-file queue status */}
+      {running && (
+        <div className="scroll-x"><table className="grid"><thead><tr><th>File</th><th>Status</th><th></th></tr></thead>
+          <tbody>{queue.map((x, i) => (
+            <tr key={i}><td>{x.name}</td>
+              <td><StatusChip s={x.status} error={x.error} /></td>
+              <td className="narrow">{x.status === "done" && x.entryId && <button className="link" onClick={() => onDone(x.entryId)}>Open →</button>}</td></tr>))}</tbody></table></div>
+      )}
+
+      {running && !busy && (
+        <div className="muted" style={{ marginTop: 8 }}>
+          Finished: <b>{doneCount}</b> extracted{failCount ? <>, <b style={{ color: "#e11d48" }}>{failCount} failed</b> (re-upload those separately)</> : ""}. Click <b>Open</b> to review each draft.
+        </div>
+      )}
+      {busy && <p className="muted" style={{ marginTop: 8 }}>Extracting one at a time — please keep this tab open…</p>}
       {error && <div className="alert">{error}</div>}
-      <div className="actions"><Btn className="primary" loading={busy} disabled={!files.length} onClick={submit}>Extract & create Draft</Btn></div>
+      <div className="actions">
+        {!running && <Btn className="primary" loading={busy} disabled={!files.length} onClick={submit}>Extract &amp; create Drafts</Btn>}
+        {running && !busy && <Btn onClick={() => { setQueue(null); setFiles([]); setTypes([]); }}>Upload more</Btn>}
+      </div>
     </div>
   );
 }
