@@ -1,0 +1,1825 @@
+[
+  {
+    "file": "XEDA-1011-EXRS-ET-SPC_en_Electric_2025-11.pdf",
+    "numpages": 6,
+    "textLen": 10162,
+    "usedVision": false,
+    "ms": 12627,
+    "err": null,
+    "model": {
+      "brand": "Unox",
+      "model_number": "XEDA-1011-EXRS-ET",
+      "category": "Cooking Equipment",
+      "equipment_type": "Combi Oven",
+      "power_type": "Electric",
+      "series": "CHEFTOP-X™ Digital.ID™"
+    },
+    "attrCount": 41,
+    "noteCount": 2,
+    "modelInText": true,
+    "brandInText": true,
+    "groundPct": 95,
+    "checked": 41,
+    "ungroundedSamples": [
+      "Operating Temperature Range=30 - 300 °C",
+      "Installation Requirements=Unox products must be installed in facilities where all systems comply with current national standards."
+    ],
+    "attrs": [
+      {
+        "attr_group": "technical_specification",
+        "name": "Energy Efficiency",
+        "value": "38.8",
+        "unit": "kWh/day",
+        "source_page": 1,
+        "confidence": 1
+      },
+      {
+        "attr_group": "technical_specification",
+        "name": "Cooking Chamber Material",
+        "value": "316L Stainless Steel",
+        "unit": null,
+        "source_page": 1,
+        "confidence": 1
+      },
+      {
+        "attr_group": "technical_specification",
+        "name": "Operating Temperature Range",
+        "value": "30 - 300",
+        "unit": "°C",
+        "source_page": 1,
+        "confidence": 1
+      },
+      {
+        "attr_group": "technical_specification",
+        "name": "Preheating Temperature",
+        "value": "up to 300",
+        "unit": "°C",
+        "source_page": 1,
+        "confidence": 1
+      },
+      {
+        "attr_group": "technical_specification",
+        "name": "Humidity Setting Range",
+        "value": "10% to 100%",
+        "unit": null,
+        "source_page": 1,
+        "confidence": 1
+      },
+      {
+        "attr_group": "technical_specification",
+        "name": "Fan Speed",
+        "value": "5 continuous speeds (2,700 rpm) and 2 AIR.Tornado speeds (3,600 rpm)",
+        "unit": null,
+        "source_page": 1,
+        "confidence": 1
+      },
+      {
+        "attr_group": "technical_specification",
+        "name": "Storable Programs",
+        "value": "1000+",
+        "unit": null,
+        "source_page": 1,
+        "confidence": 1
+      },
+      {
+        "attr_group": "technical_specification",
+        "name": "Tray Capacity",
+        "value": "10 trays GN 1/1",
+        "unit": null,
+        "source_page": 1,
+        "confidence": 1
+      },
+      {
+        "attr_group": "technical_specification",
+        "name": "Tray Pitch",
+        "value": "67",
+        "unit": "mm",
+        "source_page": 4,
+        "confidence": 1
+      },
+      {
+        "attr_group": "technical_specification",
+        "name": "Net Weight",
+        "value": "132",
+        "unit": "kg",
+        "source_page": 4,
+        "confidence": 1
+      },
+      {
+        "attr_group": "technical_specification",
+        "name": "Width",
+        "value": "750",
+        "unit": "mm",
+        "source_page": 4,
+        "confidence": 1
+      },
+      {
+        "attr_group": "technical_specification",
+        "name": "Depth",
+        "value": "841",
+        "unit": "mm",
+        "source_page": 4,
+        "confidence": 1
+      },
+      {
+        "attr_group": "technical_specification",
+        "name": "Height",
+        "value": "1069",
+        "unit": "mm",
+        "source_page": 4,
+        "confidence": 1
+      },
+      {
+        "attr_group": "electrical",
+        "name": "Voltage Option A",
+        "value": "380-415",
+        "unit": "V",
+        "source_page": 5,
+        "confidence": 1
+      },
+      {
+        "attr_group": "electrical",
+        "name": "Phase Option A",
+        "value": "3PH+N+PE",
+        "unit": null,
+        "source_page": 5,
+        "confidence": 1
+      },
+      {
+        "attr_group": "electrical",
+        "name": "Frequency Option A",
+        "value": "50 / 60",
+        "unit": "Hz",
+        "source_page": 5,
+        "confidence": 1
+      },
+      {
+        "attr_group": "electrical",
+        "name": "Total Power Option A",
+        "value": "19.6",
+        "unit": "kW",
+        "source_page": 5,
+        "confidence": 1
+      },
+      {
+        "attr_group": "electrical",
+        "name": "Max Amp Draw Option A",
+        "value": "30",
+        "unit": "A",
+        "source_page": 5,
+        "confidence": 1
+      },
+      {
+        "attr_group": "electrical",
+        "name": "Required Breaker Size Option A",
+        "value": "32",
+        "unit": "A",
+        "source_page": 5,
+        "confidence": 1
+      },
+      {
+        "attr_group": "electrical",
+        "name": "Power Cable Requirements Option A",
+        "value": "5G x 4 mm^2",
+        "unit": null,
+        "source_page": 5,
+        "confidence": 1
+      },
+      {
+        "attr_group": "electrical",
+        "name": "Voltage Option B",
+        "value": "220-240",
+        "unit": "V",
+        "source_page": 5,
+        "confidence": 1
+      },
+      {
+        "attr_group": "electrical",
+        "name": "Phase Option B",
+        "value": "3PH+PE",
+        "unit": null,
+        "source_page": 5,
+        "confidence": 1
+      },
+      {
+        "attr_group": "electrical",
+        "name": "Frequency Option B",
+        "value": "50 / 60",
+        "unit": "Hz",
+        "source_page": 5,
+        "confidence": 1
+      },
+      {
+        "attr_group": "electrical",
+        "name": "Total Power Option B",
+        "value": "19.6",
+        "unit": "kW",
+        "source_page": 5,
+        "confidence": 1
+      },
+      {
+        "attr_group": "electrical",
+        "name": "Max Amp Draw Option B",
+        "value": "49.5",
+        "unit": "A",
+        "source_page": 5,
+        "confidence": 1
+      },
+      {
+        "attr_group": "electrical",
+        "name": "Required Breaker Size Option B",
+        "value": "63",
+        "unit": "A",
+        "source_page": 5,
+        "confidence": 1
+      },
+      {
+        "attr_group": "electrical",
+        "name": "Power Cable Requirements Option B",
+        "value": "4G x 10 mm^2",
+        "unit": null,
+        "source_page": 5,
+        "confidence": 1
+      },
+      {
+        "attr_group": "water_drain",
+        "name": "Cold Water Connection Type",
+        "value": "3/4\" NPT",
+        "unit": null,
+        "source_page": 6,
+        "confidence": 1
+      },
+      {
+        "attr_group": "water_drain",
+        "name": "Water Pressure",
+        "value": "1.5 to 10",
+        "unit": "Bar",
+        "source_page": 6,
+        "confidence": 1
+      },
+      {
+        "attr_group": "water_drain",
+        "name": "Recommended Water Pressure",
+        "value": "2",
+        "unit": "Bar",
+        "source_page": 6,
+        "confidence": 1
+      },
+      {
+        "attr_group": "water_drain",
+        "name": "Free Chlorine",
+        "value": "≤ 0.5",
+        "unit": "ppm",
+        "source_page": 6,
+        "confidence": 1
+      },
+      {
+        "attr_group": "water_drain",
+        "name": "Chloramine",
+        "value": "≤ 0.1",
+        "unit": "ppm",
+        "source_page": 6,
+        "confidence": 1
+      },
+      {
+        "attr_group": "water_drain",
+        "name": "pH",
+        "value": "7 - 8.5",
+        "unit": null,
+        "source_page": 6,
+        "confidence": 1
+      },
+      {
+        "attr_group": "water_drain",
+        "name": "Electrical Conductivity",
+        "value": "≤ 1500",
+        "unit": "μS/cm",
+        "source_page": 6,
+        "confidence": 1
+      },
+      {
+        "attr_group": "water_drain",
+        "name": "Total Hardness",
+        "value": "≤ 30° dH (534 ppm)",
+        "unit": null,
+        "source_page": 6,
+        "confidence": 1
+      },
+      {
+        "attr_group": "water_drain",
+        "name": "Chlorides",
+        "value": "≤ 250",
+        "unit": "ppm",
+        "source_page": 6,
+        "confidence": 1
+      },
+      {
+        "attr_group": "connection_point",
+        "name": "Cold Water Connection Position",
+        "value": "3/4\" female NPT water inlet",
+        "unit": null,
+        "source_page": 4,
+        "confidence": 1
+      },
+      {
+        "attr_group": "connection_point",
+        "name": "Drain Connection Position",
+        "value": "Chamber drain pipe",
+        "unit": null,
+        "source_page": 4,
+        "confidence": 1
+      },
+      {
+        "attr_group": "connection_point",
+        "name": "Exhaust Connection Position",
+        "value": "Hot fumes exhaust chimney",
+        "unit": null,
+        "source_page": 4,
+        "confidence": 1
+      },
+      {
+        "attr_group": "connection_point",
+        "name": "Cooling Air Outlet Position",
+        "value": "Cooling air outlet",
+        "unit": null,
+        "source_page": 4,
+        "confidence": 1
+      },
+      {
+        "attr_group": "installation",
+        "name": "Installation Requirements",
+        "value": "Unox products must be installed in facilities where all systems comply with current national standards.",
+        "unit": null,
+        "source_page": 5,
+        "confidence": 1
+      }
+    ]
+  },
+  {
+    "file": "XEFR-10EU-EGRN-SPC_en_Electric_2023-12 (1).pdf",
+    "numpages": 3,
+    "textLen": 3053,
+    "usedVision": false,
+    "ms": 7110,
+    "err": null,
+    "model": {
+      "brand": "Unox",
+      "model_number": "XEFR-10EU-EGRN",
+      "category": "Cooking Equipment",
+      "equipment_type": "Convection Oven",
+      "power_type": "Electric",
+      "series": "BAKERLUX SHOP.Pro GO"
+    },
+    "attrCount": 26,
+    "noteCount": 2,
+    "modelInText": true,
+    "brandInText": true,
+    "groundPct": 96,
+    "checked": 26,
+    "ungroundedSamples": [
+      "Operating Temperature Range=30 - 260 °C"
+    ],
+    "attrs": [
+      {
+        "attr_group": "technical_specification",
+        "name": "Energy Efficiency",
+        "value": "27.1",
+        "unit": "kWh/day",
+        "source_page": 1,
+        "confidence": 1
+      },
+      {
+        "attr_group": "technical_specification",
+        "name": "Capacity",
+        "value": "10 trays 600x400",
+        "unit": null,
+        "source_page": 1,
+        "confidence": 1
+      },
+      {
+        "attr_group": "technical_specification",
+        "name": "Operating Temperature Range",
+        "value": "30 - 260",
+        "unit": "°C",
+        "source_page": 1,
+        "confidence": 1
+      },
+      {
+        "attr_group": "technical_specification",
+        "name": "Material",
+        "value": "AISI 304 Stainless Steel",
+        "unit": null,
+        "source_page": 1,
+        "confidence": 1
+      },
+      {
+        "attr_group": "technical_specification",
+        "name": "Programs",
+        "value": "99",
+        "unit": null,
+        "source_page": 1,
+        "confidence": 1
+      },
+      {
+        "attr_group": "technical_specification",
+        "name": "Cooking Steps",
+        "value": "3",
+        "unit": null,
+        "source_page": 1,
+        "confidence": 1
+      },
+      {
+        "attr_group": "technical_specification",
+        "name": "Tray Pitch",
+        "value": "75",
+        "unit": "mm",
+        "source_page": 2,
+        "confidence": 1
+      },
+      {
+        "attr_group": "dimensions_clearance",
+        "name": "Width",
+        "value": "800",
+        "unit": "mm",
+        "source_page": 2,
+        "confidence": 1
+      },
+      {
+        "attr_group": "dimensions_clearance",
+        "name": "Depth",
+        "value": "811",
+        "unit": "mm",
+        "source_page": 2,
+        "confidence": 1
+      },
+      {
+        "attr_group": "dimensions_clearance",
+        "name": "Height",
+        "value": "952",
+        "unit": "mm",
+        "source_page": 2,
+        "confidence": 1
+      },
+      {
+        "attr_group": "dimensions_clearance",
+        "name": "Net Weight",
+        "value": "96",
+        "unit": "kg",
+        "source_page": 2,
+        "confidence": 1
+      },
+      {
+        "attr_group": "electrical",
+        "name": "Voltage",
+        "value": "380-415",
+        "unit": "V",
+        "source_page": 3,
+        "confidence": 1
+      },
+      {
+        "attr_group": "electrical",
+        "name": "Phase",
+        "value": "3PH+N+PE",
+        "unit": null,
+        "source_page": 3,
+        "confidence": 1
+      },
+      {
+        "attr_group": "electrical",
+        "name": "Frequency",
+        "value": "50 / 60",
+        "unit": "Hz",
+        "source_page": 3,
+        "confidence": 1
+      },
+      {
+        "attr_group": "electrical",
+        "name": "Total Power",
+        "value": "15.5",
+        "unit": "kW",
+        "source_page": 3,
+        "confidence": 1
+      },
+      {
+        "attr_group": "electrical",
+        "name": "Max Amp Draw",
+        "value": "26",
+        "unit": "A",
+        "source_page": 3,
+        "confidence": 1
+      },
+      {
+        "attr_group": "electrical",
+        "name": "Required Breaker Size",
+        "value": "32",
+        "unit": "A",
+        "source_page": 3,
+        "confidence": 1
+      },
+      {
+        "attr_group": "electrical",
+        "name": "Power Cable Requirements",
+        "value": "5G x 4 mm^2",
+        "unit": null,
+        "source_page": 3,
+        "confidence": 1
+      },
+      {
+        "attr_group": "electrical",
+        "name": "Voltage Option A",
+        "value": "220-240",
+        "unit": "V",
+        "source_page": 3,
+        "confidence": 1
+      },
+      {
+        "attr_group": "electrical",
+        "name": "Phase Option A",
+        "value": "3PH+PE",
+        "unit": null,
+        "source_page": 3,
+        "confidence": 1
+      },
+      {
+        "attr_group": "electrical",
+        "name": "Frequency Option A",
+        "value": "50 / 60",
+        "unit": "Hz",
+        "source_page": 3,
+        "confidence": 1
+      },
+      {
+        "attr_group": "electrical",
+        "name": "Total Power Option A",
+        "value": "15.5",
+        "unit": "kW",
+        "source_page": 3,
+        "confidence": 1
+      },
+      {
+        "attr_group": "electrical",
+        "name": "Max Amp Draw Option A",
+        "value": "39.5",
+        "unit": "A",
+        "source_page": 3,
+        "confidence": 1
+      },
+      {
+        "attr_group": "electrical",
+        "name": "Required Breaker Size Option A",
+        "value": "40",
+        "unit": "A",
+        "source_page": 3,
+        "confidence": 1
+      },
+      {
+        "attr_group": "electrical",
+        "name": "Power Cable Requirements Option A",
+        "value": "4G x 6 mm^2",
+        "unit": null,
+        "source_page": 3,
+        "confidence": 1
+      },
+      {
+        "attr_group": "installation",
+        "name": "Installation Requirements",
+        "value": "Installations must comply with all local electrical systems, particularly as for minimum wire gauge required for field connection, hydraulic and ventilation supply.",
+        "unit": null,
+        "source_page": 3,
+        "confidence": 1
+      }
+    ]
+  },
+  {
+    "file": "XEMA-01NS-MCDN-SPC_en_Electric_2025-01.pdf",
+    "numpages": 3,
+    "textLen": 4312,
+    "usedVision": false,
+    "ms": 6986,
+    "err": null,
+    "model": {
+      "brand": "Unox",
+      "model_number": "XEMA-01NS-MCDN",
+      "category": "Cooking Equipment",
+      "equipment_type": "Speed Oven",
+      "power_type": "Electric",
+      "series": "SPEED.Compact™ ECO"
+    },
+    "attrCount": 26,
+    "noteCount": 1,
+    "modelInText": true,
+    "brandInText": true,
+    "groundPct": 92,
+    "checked": 26,
+    "ungroundedSamples": [
+      "Operating Temperature Range=30-280 °C",
+      "Integrated Wi-Fi=Yes"
+    ],
+    "attrs": [
+      {
+        "attr_group": "technical_specification",
+        "name": "Cooking Chamber Dimensions",
+        "value": "30x30 cm",
+        "unit": null,
+        "source_page": 1,
+        "confidence": 1
+      },
+      {
+        "attr_group": "technical_specification",
+        "name": "Door Opening Footprint",
+        "value": "17 cm",
+        "unit": null,
+        "source_page": 1,
+        "confidence": 1
+      },
+      {
+        "attr_group": "technical_specification",
+        "name": "Operating Temperature Range",
+        "value": "30-280",
+        "unit": "°C",
+        "source_page": 1,
+        "confidence": 1
+      },
+      {
+        "attr_group": "technical_specification",
+        "name": "Cooking Steps",
+        "value": "Up to 9",
+        "unit": null,
+        "source_page": 1,
+        "confidence": 1
+      },
+      {
+        "attr_group": "technical_specification",
+        "name": "Speed Programs",
+        "value": "384",
+        "unit": null,
+        "source_page": 1,
+        "confidence": 1
+      },
+      {
+        "attr_group": "technical_specification",
+        "name": "Favorite Programs",
+        "value": "10",
+        "unit": null,
+        "source_page": 1,
+        "confidence": 1
+      },
+      {
+        "attr_group": "technical_specification",
+        "name": "Material",
+        "value": "AISI 304 Stainless Steel",
+        "unit": null,
+        "source_page": 1,
+        "confidence": 1
+      },
+      {
+        "attr_group": "technical_specification",
+        "name": "Insulation Material",
+        "value": "Rock Wool Mineral",
+        "unit": null,
+        "source_page": 1,
+        "confidence": 1
+      },
+      {
+        "attr_group": "technical_specification",
+        "name": "Integrated Wi-Fi",
+        "value": "Yes",
+        "unit": null,
+        "source_page": 1,
+        "confidence": 1
+      },
+      {
+        "attr_group": "dimensions_clearance",
+        "name": "Width",
+        "value": "424",
+        "unit": "mm",
+        "source_page": 2,
+        "confidence": 1
+      },
+      {
+        "attr_group": "dimensions_clearance",
+        "name": "Depth",
+        "value": "719",
+        "unit": "mm",
+        "source_page": 2,
+        "confidence": 1
+      },
+      {
+        "attr_group": "dimensions_clearance",
+        "name": "Height",
+        "value": "616",
+        "unit": "mm",
+        "source_page": 2,
+        "confidence": 1
+      },
+      {
+        "attr_group": "dimensions_clearance",
+        "name": "Net Weight",
+        "value": "50",
+        "unit": "kg",
+        "source_page": 2,
+        "confidence": 1
+      },
+      {
+        "attr_group": "electrical",
+        "name": "Voltage",
+        "value": "220-240",
+        "unit": "V",
+        "source_page": 3,
+        "confidence": 1
+      },
+      {
+        "attr_group": "electrical",
+        "name": "Phase",
+        "value": "1PH+PE",
+        "unit": null,
+        "source_page": 3,
+        "confidence": 1
+      },
+      {
+        "attr_group": "electrical",
+        "name": "Frequency",
+        "value": "50",
+        "unit": "Hz",
+        "source_page": 3,
+        "confidence": 1
+      },
+      {
+        "attr_group": "electrical",
+        "name": "Total Power",
+        "value": "3.6",
+        "unit": "kW",
+        "source_page": 3,
+        "confidence": 1
+      },
+      {
+        "attr_group": "electrical",
+        "name": "Max Amp Draw",
+        "value": "16",
+        "unit": "A",
+        "source_page": 3,
+        "confidence": 1
+      },
+      {
+        "attr_group": "electrical",
+        "name": "Required Breaker Size",
+        "value": "15.5",
+        "unit": "A",
+        "source_page": 3,
+        "confidence": 1
+      },
+      {
+        "attr_group": "electrical",
+        "name": "Power Cable Requirements",
+        "value": "3G x 1.5 mm^2",
+        "unit": null,
+        "source_page": 3,
+        "confidence": 1
+      },
+      {
+        "attr_group": "electrical",
+        "name": "Plug Type",
+        "value": "Schuko | H07RN-F",
+        "unit": null,
+        "source_page": 3,
+        "confidence": 1
+      },
+      {
+        "attr_group": "connection_point",
+        "name": "Terminal Board Power Supply Position",
+        "value": "2",
+        "unit": null,
+        "source_page": 2,
+        "confidence": 1
+      },
+      {
+        "attr_group": "connection_point",
+        "name": "Unipotential Terminal Position",
+        "value": "3",
+        "unit": null,
+        "source_page": 2,
+        "confidence": 1
+      },
+      {
+        "attr_group": "connection_point",
+        "name": "Safety Thermostat Position",
+        "value": "7",
+        "unit": null,
+        "source_page": 2,
+        "confidence": 1
+      },
+      {
+        "attr_group": "connection_point",
+        "name": "Hot Fumes Exhaust Chimney Position",
+        "value": "12",
+        "unit": null,
+        "source_page": 2,
+        "confidence": 1
+      },
+      {
+        "attr_group": "connection_point",
+        "name": "Cooling Air Outlet Position",
+        "value": "27",
+        "unit": null,
+        "source_page": 2,
+        "confidence": 1
+      }
+    ]
+  },
+  {
+    "file": "XEVC-1011-EPRM-SPC_en_Electric_2023-12.pdf",
+    "numpages": 4,
+    "textLen": 7055,
+    "usedVision": false,
+    "ms": 10143,
+    "err": null,
+    "model": {
+      "brand": "Unox",
+      "model_number": "XEVC-1011-EPRM",
+      "category": "Cooking Equipment",
+      "equipment_type": "Combi Oven",
+      "power_type": "Electric",
+      "series": "CHEFTOP MIND.Maps™ PLUS"
+    },
+    "attrCount": 39,
+    "noteCount": 3,
+    "modelInText": true,
+    "brandInText": true,
+    "groundPct": 97,
+    "checked": 39,
+    "ungroundedSamples": [
+      "Operating Temperature Range=30 - 260 °C"
+    ],
+    "attrs": [
+      {
+        "attr_group": "technical_specification",
+        "name": "Energy Efficiency",
+        "value": "36.6",
+        "unit": "kWh/day",
+        "source_page": 1,
+        "confidence": 1
+      },
+      {
+        "attr_group": "technical_specification",
+        "name": "Capacity",
+        "value": "10 trays GN 1/1",
+        "unit": null,
+        "source_page": 1,
+        "confidence": 1
+      },
+      {
+        "attr_group": "technical_specification",
+        "name": "Operating Temperature Range",
+        "value": "30 - 260",
+        "unit": "°C",
+        "source_page": 1,
+        "confidence": 1
+      },
+      {
+        "attr_group": "technical_specification",
+        "name": "Cooking Chamber Material",
+        "value": "AISI 304 stainless steel",
+        "unit": null,
+        "source_page": 2,
+        "confidence": 1
+      },
+      {
+        "attr_group": "technical_specification",
+        "name": "Tray Pitch",
+        "value": "67",
+        "unit": "mm",
+        "source_page": 3,
+        "confidence": 1
+      },
+      {
+        "attr_group": "electrical",
+        "name": "Voltage",
+        "value": "380-415",
+        "unit": "V",
+        "source_page": 4,
+        "confidence": 1
+      },
+      {
+        "attr_group": "electrical",
+        "name": "Phase",
+        "value": "3PH+N+PE",
+        "unit": null,
+        "source_page": 4,
+        "confidence": 1
+      },
+      {
+        "attr_group": "electrical",
+        "name": "Frequency",
+        "value": "50 / 60",
+        "unit": "Hz",
+        "source_page": 4,
+        "confidence": 1
+      },
+      {
+        "attr_group": "electrical",
+        "name": "Total Power",
+        "value": "18.5",
+        "unit": "kW",
+        "source_page": 4,
+        "confidence": 1
+      },
+      {
+        "attr_group": "electrical",
+        "name": "Max Amp Draw",
+        "value": "26",
+        "unit": "A",
+        "source_page": 4,
+        "confidence": 1
+      },
+      {
+        "attr_group": "electrical",
+        "name": "Required Breaker Size",
+        "value": "32",
+        "unit": "A",
+        "source_page": 4,
+        "confidence": 1
+      },
+      {
+        "attr_group": "electrical",
+        "name": "Power Cable Requirements",
+        "value": "5G x 4 mm^2",
+        "unit": null,
+        "source_page": 4,
+        "confidence": 1
+      },
+      {
+        "attr_group": "electrical",
+        "name": "Plug",
+        "value": "Not Included",
+        "unit": null,
+        "source_page": 4,
+        "confidence": 1
+      },
+      {
+        "attr_group": "electrical",
+        "name": "Voltage Option A",
+        "value": "220-240",
+        "unit": "V",
+        "source_page": 4,
+        "confidence": 1
+      },
+      {
+        "attr_group": "electrical",
+        "name": "Phase Option A",
+        "value": "3PH+PE",
+        "unit": null,
+        "source_page": 4,
+        "confidence": 1
+      },
+      {
+        "attr_group": "electrical",
+        "name": "Max Amp Draw Option A",
+        "value": "47.5",
+        "unit": "A",
+        "source_page": 4,
+        "confidence": 1
+      },
+      {
+        "attr_group": "electrical",
+        "name": "Required Breaker Size Option A",
+        "value": "50",
+        "unit": "A",
+        "source_page": 4,
+        "confidence": 1
+      },
+      {
+        "attr_group": "electrical",
+        "name": "Power Cable Requirements Option A",
+        "value": "4G x 10 mm^2",
+        "unit": null,
+        "source_page": 4,
+        "confidence": 1
+      },
+      {
+        "attr_group": "water_drain",
+        "name": "Cold Water Connection Type",
+        "value": "3/4\" NPT",
+        "unit": null,
+        "source_page": 4,
+        "confidence": 1
+      },
+      {
+        "attr_group": "water_drain",
+        "name": "Water Pressure",
+        "value": "22 to 87",
+        "unit": "psi",
+        "source_page": 4,
+        "confidence": 1
+      },
+      {
+        "attr_group": "water_drain",
+        "name": "Water Pressure",
+        "value": "1.5 to 6",
+        "unit": "Bar",
+        "source_page": 4,
+        "confidence": 1
+      },
+      {
+        "attr_group": "water_drain",
+        "name": "Recommended Water Pressure",
+        "value": "29",
+        "unit": "psi",
+        "source_page": 4,
+        "confidence": 1
+      },
+      {
+        "attr_group": "water_drain",
+        "name": "Recommended Water Pressure",
+        "value": "2",
+        "unit": "Bar",
+        "source_page": 4,
+        "confidence": 1
+      },
+      {
+        "attr_group": "water_drain",
+        "name": "Free Chlorine",
+        "value": "≤ 0.5",
+        "unit": "ppm",
+        "source_page": 4,
+        "confidence": 1
+      },
+      {
+        "attr_group": "water_drain",
+        "name": "Chloramine",
+        "value": "≤ 0.1",
+        "unit": "ppm",
+        "source_page": 4,
+        "confidence": 1
+      },
+      {
+        "attr_group": "water_drain",
+        "name": "pH",
+        "value": "7 - 8.5",
+        "unit": null,
+        "source_page": 4,
+        "confidence": 1
+      },
+      {
+        "attr_group": "water_drain",
+        "name": "Electrical Conductivity",
+        "value": "≤ 1000",
+        "unit": "μS/cm",
+        "source_page": 4,
+        "confidence": 1
+      },
+      {
+        "attr_group": "water_drain",
+        "name": "Total Hardness",
+        "value": "≤ 30",
+        "unit": "°dH",
+        "source_page": 4,
+        "confidence": 1
+      },
+      {
+        "attr_group": "water_drain",
+        "name": "Chlorides",
+        "value": "≤ 120",
+        "unit": "ppm",
+        "source_page": 4,
+        "confidence": 1
+      },
+      {
+        "attr_group": "water_drain",
+        "name": "Steam Circuit Total Hardness",
+        "value": "≤ 8",
+        "unit": "°dH",
+        "source_page": 4,
+        "confidence": 1
+      },
+      {
+        "attr_group": "water_drain",
+        "name": "Steam Circuit Chlorides",
+        "value": "≤ 25",
+        "unit": "ppm",
+        "source_page": 4,
+        "confidence": 1
+      },
+      {
+        "attr_group": "dimensions_clearance",
+        "name": "Width",
+        "value": "750",
+        "unit": "mm",
+        "source_page": 3,
+        "confidence": 1
+      },
+      {
+        "attr_group": "dimensions_clearance",
+        "name": "Depth",
+        "value": "783",
+        "unit": "mm",
+        "source_page": 3,
+        "confidence": 1
+      },
+      {
+        "attr_group": "dimensions_clearance",
+        "name": "Height",
+        "value": "1010",
+        "unit": "mm",
+        "source_page": 3,
+        "confidence": 1
+      },
+      {
+        "attr_group": "dimensions_clearance",
+        "name": "Net Weight",
+        "value": "98",
+        "unit": "kg",
+        "source_page": 3,
+        "confidence": 1
+      },
+      {
+        "attr_group": "connection_point",
+        "name": "Cold Water Connection Position",
+        "value": "3/4\" female NPT water inlet",
+        "unit": null,
+        "source_page": 3,
+        "confidence": 1
+      },
+      {
+        "attr_group": "connection_point",
+        "name": "Chamber Drain Pipe Position",
+        "value": "Chamber drain pipe",
+        "unit": null,
+        "source_page": 3,
+        "confidence": 1
+      },
+      {
+        "attr_group": "connection_point",
+        "name": "Hot Fumes Exhaust Chimney Position",
+        "value": "Hot fumes exhaust chimney",
+        "unit": null,
+        "source_page": 3,
+        "confidence": 1
+      },
+      {
+        "attr_group": "installation",
+        "name": "Installation Requirements",
+        "value": "Installations must comply with all local electrical systems, particularly as for minimum wire gauge required for field connection, hydraulic and ventilation supply.",
+        "unit": null,
+        "source_page": 4,
+        "confidence": 1
+      }
+    ]
+  },
+  {
+    "file": "document (1).pdf",
+    "numpages": 3,
+    "textLen": 1752,
+    "usedVision": false,
+    "ms": 5347,
+    "err": null,
+    "model": {
+      "brand": "Bartscher",
+      "model_number": "150182",
+      "category": "Food Preparation Equipment",
+      "equipment_type": "Blender",
+      "power_type": "Electric",
+      "series": null
+    },
+    "attrCount": 22,
+    "noteCount": 2,
+    "modelInText": true,
+    "brandInText": true,
+    "groundPct": 91,
+    "checked": 22,
+    "ungroundedSamples": [
+      "Designed For=Chopping, Mixing, Mashing, Shaking, Crushing ice",
+      "Noise Protection Hood=Yes, Detachable"
+    ],
+    "attrs": [
+      {
+        "attr_group": "technical_specification",
+        "name": "Content",
+        "value": "2.875",
+        "unit": "litre(s)",
+        "source_page": 1,
+        "confidence": 1
+      },
+      {
+        "attr_group": "technical_specification",
+        "name": "Filling Quantity",
+        "value": "2.5",
+        "unit": "litre(s)",
+        "source_page": 1,
+        "confidence": 1
+      },
+      {
+        "attr_group": "technical_specification",
+        "name": "Design Knife",
+        "value": "Stainless steel, 6-wing",
+        "unit": null,
+        "source_page": 1,
+        "confidence": 1
+      },
+      {
+        "attr_group": "technical_specification",
+        "name": "Material Mixing Beaker",
+        "value": "Polycarbonate, Transparent",
+        "unit": null,
+        "source_page": 1,
+        "confidence": 1
+      },
+      {
+        "attr_group": "technical_specification",
+        "name": "RPM Max",
+        "value": "28000",
+        "unit": "r/min",
+        "source_page": 1,
+        "confidence": 1
+      },
+      {
+        "attr_group": "technical_specification",
+        "name": "Speed Control",
+        "value": "Stepless",
+        "unit": null,
+        "source_page": 1,
+        "confidence": 1
+      },
+      {
+        "attr_group": "technical_specification",
+        "name": "Pulse Function",
+        "value": "Yes",
+        "unit": null,
+        "source_page": 1,
+        "confidence": 1
+      },
+      {
+        "attr_group": "technical_specification",
+        "name": "Designed For",
+        "value": "Chopping, Mixing, Mashing, Shaking, Crushing ice",
+        "unit": null,
+        "source_page": 1,
+        "confidence": 1
+      },
+      {
+        "attr_group": "technical_specification",
+        "name": "Noise Protection Hood",
+        "value": "Yes, Detachable",
+        "unit": null,
+        "source_page": 1,
+        "confidence": 1
+      },
+      {
+        "attr_group": "technical_specification",
+        "name": "Control Unit",
+        "value": "Rocket switch, Toggle",
+        "unit": null,
+        "source_page": 2,
+        "confidence": 1
+      },
+      {
+        "attr_group": "technical_specification",
+        "name": "Motor Protection",
+        "value": "Yes",
+        "unit": null,
+        "source_page": 2,
+        "confidence": 1
+      },
+      {
+        "attr_group": "technical_specification",
+        "name": "Safety Switch",
+        "value": "On the tank, On the lid",
+        "unit": null,
+        "source_page": 2,
+        "confidence": 1
+      },
+      {
+        "attr_group": "technical_specification",
+        "name": "ON/OFF Switch",
+        "value": "Yes",
+        "unit": null,
+        "source_page": 2,
+        "confidence": 1
+      },
+      {
+        "attr_group": "technical_specification",
+        "name": "Setting Feet",
+        "value": "Hard rubber",
+        "unit": null,
+        "source_page": 2,
+        "confidence": 1
+      },
+      {
+        "attr_group": "technical_specification",
+        "name": "BPA-free",
+        "value": "Yes",
+        "unit": null,
+        "source_page": 2,
+        "confidence": 1
+      },
+      {
+        "attr_group": "technical_specification",
+        "name": "Material",
+        "value": "Plastic ABS",
+        "unit": null,
+        "source_page": 2,
+        "confidence": 1
+      },
+      {
+        "attr_group": "dimensions_clearance",
+        "name": "Size",
+        "value": "W 240 x D 300 x H 565",
+        "unit": "mm",
+        "source_page": 2,
+        "confidence": 1
+      },
+      {
+        "attr_group": "dimensions_clearance",
+        "name": "Weight",
+        "value": "9.1",
+        "unit": "kg",
+        "source_page": 2,
+        "confidence": 1
+      },
+      {
+        "attr_group": "electrical",
+        "name": "Power Load",
+        "value": "1.68",
+        "unit": "kW",
+        "source_page": 2,
+        "confidence": 1
+      },
+      {
+        "attr_group": "electrical",
+        "name": "Voltage",
+        "value": "230",
+        "unit": "V",
+        "source_page": 2,
+        "confidence": 1
+      },
+      {
+        "attr_group": "electrical",
+        "name": "Frequency",
+        "value": "50/60",
+        "unit": "Hz",
+        "source_page": 2,
+        "confidence": 1
+      },
+      {
+        "attr_group": "electrical",
+        "name": "Equipment Connection",
+        "value": "Pluggable",
+        "unit": null,
+        "source_page": 2,
+        "confidence": 1
+      }
+    ]
+  },
+  {
+    "file": "document.pdf",
+    "numpages": 7,
+    "textLen": 7458,
+    "usedVision": false,
+    "ms": 11413,
+    "err": null,
+    "model": {
+      "brand": "Bartscher",
+      "model_number": "190086",
+      "category": "Beverage Equipment",
+      "equipment_type": "Automatic Coffee Machine",
+      "power_type": "Electric",
+      "series": "KV2 Premium"
+    },
+    "attrCount": 53,
+    "noteCount": 3,
+    "modelInText": true,
+    "brandInText": true,
+    "groundPct": 94,
+    "checked": 53,
+    "ungroundedSamples": [
+      "Water Supply Options=Water tank, Fixed connection, External container",
+      "Milk Supply Options=From topping container, External via tube",
+      "Properties=Bean/topping container and brewing unit removable without tools"
+    ],
+    "attrs": [
+      {
+        "attr_group": "technical_specification",
+        "name": "Number of Topping Containers",
+        "value": "1",
+        "unit": null,
+        "source_page": 1,
+        "confidence": 1
+      },
+      {
+        "attr_group": "technical_specification",
+        "name": "Content Topping Container",
+        "value": "1600",
+        "unit": "g",
+        "source_page": 1,
+        "confidence": 1
+      },
+      {
+        "attr_group": "technical_specification",
+        "name": "Dosing Topping Powder",
+        "value": "Accurate to the gram",
+        "unit": null,
+        "source_page": 1,
+        "confidence": 1
+      },
+      {
+        "attr_group": "technical_specification",
+        "name": "Operating System",
+        "value": "Android",
+        "unit": null,
+        "source_page": 1,
+        "confidence": 1
+      },
+      {
+        "attr_group": "technical_specification",
+        "name": "Video Display",
+        "value": "1 video can be selected for all processes",
+        "unit": null,
+        "source_page": 1,
+        "confidence": 1
+      },
+      {
+        "attr_group": "technical_specification",
+        "name": "Colour",
+        "value": "Black",
+        "unit": null,
+        "source_page": 1,
+        "confidence": 1
+      },
+      {
+        "attr_group": "technical_specification",
+        "name": "Brewing Groups",
+        "value": "1",
+        "unit": null,
+        "source_page": 1,
+        "confidence": 1
+      },
+      {
+        "attr_group": "technical_specification",
+        "name": "Minimum Brewing Quantity",
+        "value": "15",
+        "unit": "ml",
+        "source_page": 1,
+        "confidence": 1
+      },
+      {
+        "attr_group": "technical_specification",
+        "name": "Designed For",
+        "value": "120 cups / day",
+        "unit": null,
+        "source_page": 1,
+        "confidence": 1
+      },
+      {
+        "attr_group": "technical_specification",
+        "name": "Output Max (Single Cup Outlet)",
+        "value": "75",
+        "unit": "cups of 120 ml / hour",
+        "source_page": 1,
+        "confidence": 1
+      },
+      {
+        "attr_group": "technical_specification",
+        "name": "Output Max (Double Cup Outlet)",
+        "value": "90",
+        "unit": "cups of 120 ml / hour",
+        "source_page": 1,
+        "confidence": 1
+      },
+      {
+        "attr_group": "technical_specification",
+        "name": "Number of Bean Containers",
+        "value": "2",
+        "unit": null,
+        "source_page": 1,
+        "confidence": 1
+      },
+      {
+        "attr_group": "technical_specification",
+        "name": "Boiler Temperature",
+        "value": "98",
+        "unit": "°C",
+        "source_page": 1,
+        "confidence": 1
+      },
+      {
+        "attr_group": "technical_specification",
+        "name": "Pump Pressure",
+        "value": "19",
+        "unit": "bar",
+        "source_page": 2,
+        "confidence": 1
+      },
+      {
+        "attr_group": "technical_specification",
+        "name": "Content Bean Container",
+        "value": "2 x 1200",
+        "unit": "g",
+        "source_page": 2,
+        "confidence": 1
+      },
+      {
+        "attr_group": "technical_specification",
+        "name": "Bean/Topping Containers Lockable",
+        "value": "Yes",
+        "unit": null,
+        "source_page": 2,
+        "confidence": 1
+      },
+      {
+        "attr_group": "technical_specification",
+        "name": "Detachable Bean/Topping Containers",
+        "value": "Yes",
+        "unit": null,
+        "source_page": 2,
+        "confidence": 1
+      },
+      {
+        "attr_group": "technical_specification",
+        "name": "Cup Counter",
+        "value": "Per program and total",
+        "unit": null,
+        "source_page": 2,
+        "confidence": 1
+      },
+      {
+        "attr_group": "technical_specification",
+        "name": "Decalcification Signal",
+        "value": "Yes",
+        "unit": null,
+        "source_page": 2,
+        "confidence": 1
+      },
+      {
+        "attr_group": "technical_specification",
+        "name": "Control Unit",
+        "value": "Touch",
+        "unit": null,
+        "source_page": 2,
+        "confidence": 1
+      },
+      {
+        "attr_group": "technical_specification",
+        "name": "IoT-capable",
+        "value": "Bartscher Cloud",
+        "unit": null,
+        "source_page": 2,
+        "confidence": 1
+      },
+      {
+        "attr_group": "technical_specification",
+        "name": "Water Supply Options",
+        "value": "Water tank, Fixed connection, External container",
+        "unit": null,
+        "source_page": 2,
+        "confidence": 1
+      },
+      {
+        "attr_group": "technical_specification",
+        "name": "Water Tank Capacity",
+        "value": "4",
+        "unit": "litre(s)",
+        "source_page": 2,
+        "confidence": 1
+      },
+      {
+        "attr_group": "technical_specification",
+        "name": "Detachable Water Tank",
+        "value": "Yes",
+        "unit": null,
+        "source_page": 2,
+        "confidence": 1
+      },
+      {
+        "attr_group": "technical_specification",
+        "name": "Milk Supply Options",
+        "value": "From topping container, External via tube",
+        "unit": null,
+        "source_page": 2,
+        "confidence": 1
+      },
+      {
+        "attr_group": "technical_specification",
+        "name": "Hot Water Function",
+        "value": "Yes",
+        "unit": null,
+        "source_page": 2,
+        "confidence": 1
+      },
+      {
+        "attr_group": "technical_specification",
+        "name": "Hot Milk Function",
+        "value": "Yes",
+        "unit": null,
+        "source_page": 2,
+        "confidence": 1
+      },
+      {
+        "attr_group": "technical_specification",
+        "name": "Grinding Mechanism",
+        "value": "2 disc grinders",
+        "unit": null,
+        "source_page": 2,
+        "confidence": 1
+      },
+      {
+        "attr_group": "technical_specification",
+        "name": "Grinder Material",
+        "value": "Steel",
+        "unit": null,
+        "source_page": 2,
+        "confidence": 1
+      },
+      {
+        "attr_group": "technical_specification",
+        "name": "Pressure System",
+        "value": "Piston pressure",
+        "unit": null,
+        "source_page": 2,
+        "confidence": 1
+      },
+      {
+        "attr_group": "technical_specification",
+        "name": "USB Connection",
+        "value": "Yes",
+        "unit": null,
+        "source_page": 2,
+        "confidence": 1
+      },
+      {
+        "attr_group": "technical_specification",
+        "name": "Milk Frother",
+        "value": "Yes",
+        "unit": null,
+        "source_page": 2,
+        "confidence": 1
+      },
+      {
+        "attr_group": "technical_specification",
+        "name": "Height-Adjustable Outlet",
+        "value": "No",
+        "unit": null,
+        "source_page": 2,
+        "confidence": 1
+      },
+      {
+        "attr_group": "technical_specification",
+        "name": "Cleaning Program",
+        "value": "Yes",
+        "unit": null,
+        "source_page": 2,
+        "confidence": 1
+      },
+      {
+        "attr_group": "technical_specification",
+        "name": "Display Size",
+        "value": "10.1",
+        "unit": "inch",
+        "source_page": 2,
+        "confidence": 1
+      },
+      {
+        "attr_group": "technical_specification",
+        "name": "Automatic Turn-off",
+        "value": "Yes",
+        "unit": null,
+        "source_page": 2,
+        "confidence": 1
+      },
+      {
+        "attr_group": "technical_specification",
+        "name": "Residues Container Capacity",
+        "value": "Approx. 45 cups",
+        "unit": null,
+        "source_page": 2,
+        "confidence": 1
+      },
+      {
+        "attr_group": "technical_specification",
+        "name": "Residues Container Dishwasher-suitable",
+        "value": "Yes",
+        "unit": null,
+        "source_page": 2,
+        "confidence": 1
+      },
+      {
+        "attr_group": "technical_specification",
+        "name": "Ground Coffee Option",
+        "value": "No",
+        "unit": null,
+        "source_page": 2,
+        "confidence": 1
+      },
+      {
+        "attr_group": "technical_specification",
+        "name": "Multi Cups",
+        "value": "Yes",
+        "unit": null,
+        "source_page": 2,
+        "confidence": 1
+      },
+      {
+        "attr_group": "technical_specification",
+        "name": "ON/OFF Switch",
+        "value": "Yes",
+        "unit": null,
+        "source_page": 3,
+        "confidence": 1
+      },
+      {
+        "attr_group": "technical_specification",
+        "name": "Control Lamp",
+        "value": "ON/OFF",
+        "unit": null,
+        "source_page": 3,
+        "confidence": 1
+      },
+      {
+        "attr_group": "technical_specification",
+        "name": "Properties",
+        "value": "Bean/topping container and brewing unit removable without tools",
+        "unit": null,
+        "source_page": 3,
+        "confidence": 1
+      },
+      {
+        "attr_group": "technical_specification",
+        "name": "Including",
+        "value": "1 milk hose, 36 cm; 1 universal key; 1 water outlet hose, 100 cm; 1 water supply hose, 150 cm",
+        "unit": null,
+        "source_page": 3,
+        "confidence": 1
+      },
+      {
+        "attr_group": "technical_specification",
+        "name": "Material",
+        "value": "Plastic",
+        "unit": null,
+        "source_page": 3,
+        "confidence": 1
+      },
+      {
+        "attr_group": "technical_specification",
+        "name": "Size",
+        "value": "W 400 x D 610 x H 695",
+        "unit": "mm",
+        "source_page": 3,
+        "confidence": 1
+      },
+      {
+        "attr_group": "technical_specification",
+        "name": "Weight",
+        "value": "29.6",
+        "unit": "kg",
+        "source_page": 3,
+        "confidence": 1
+      },
+      {
+        "attr_group": "electrical",
+        "name": "Power Load",
+        "value": "2.5",
+        "unit": "kW",
+        "source_page": 3,
+        "confidence": 1
+      },
+      {
+        "attr_group": "electrical",
+        "name": "Voltage",
+        "value": "230",
+        "unit": "V",
+        "source_page": 3,
+        "confidence": 1
+      },
+      {
+        "attr_group": "electrical",
+        "name": "Frequency",
+        "value": "50-60",
+        "unit": "Hz",
+        "source_page": 3,
+        "confidence": 1
+      },
+      {
+        "attr_group": "water_drain",
+        "name": "Water Connection",
+        "value": "Fixed connection to water supply 1/2\"",
+        "unit": null,
+        "source_page": 2,
+        "confidence": 1
+      },
+      {
+        "attr_group": "water_drain",
+        "name": "Water Pressure",
+        "value": "Maximum 3",
+        "unit": "bar",
+        "source_page": 3,
+        "confidence": 1
+      },
+      {
+        "attr_group": "water_drain",
+        "name": "Water Tank Capacity",
+        "value": "4",
+        "unit": "litre(s)",
+        "source_page": 2,
+        "confidence": 1
+      }
+    ]
+  }
+]
