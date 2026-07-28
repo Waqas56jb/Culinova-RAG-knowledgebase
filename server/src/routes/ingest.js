@@ -357,7 +357,7 @@ router.get("/excel-template", auth.authRequired, (req, res) => {
 router.post("/excel", canIngest, upload.single("file"), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: "No Excel file uploaded." });
-    const wb = XLSX.read(req.file.buffer, { type: "buffer" });
+    const wb = XLSX.read(req.file.buffer, { type: "buffer", bookFiles: true }); // bookFiles → recover pasted images
     const headers = (XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: null, blankrows: false })[0] || [])
       .map((h) => String(h ?? "").trim().toLowerCase());
 

@@ -19,13 +19,61 @@
  * change. Rows land as DRAFT; a human still reviews and approves them.
  */
 const XLSX = require("xlsx");
+const crypto = require("crypto");
 const { supabase } = require("../config/supabase");
 const { persistDraft } = require("../utils/draft");
+const { uploadBuffer } = require("./storage");
 const dictSvc = require("./params");
 const { hasRealValue, disciplineForLabel } = require("./applicability");
 
 const clean = (v) => (v == null ? null : String(v).trim() || null);
 const norm = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+
+/**
+ * Pull EMBEDDED / pasted pictures out of a workbook and map each to its data-row index. Excel keeps
+ * pictures in the package (xl/media/*), anchored to a cell through xl/drawings/* — NOT as cell text —
+ * so sheet_to_json never sees them and the product images were silently lost. This reads the drawing
+ * anchors (from-row) and the drawing rels (rId → media file) and returns:
+ *     Map<dataRowIndex(0-based), { buffer, ext, contentType }>
+ * The workbook must have been read with { bookFiles: true } so wb.files holds the raw package.
+ */
+function extractEmbeddedImages(wb, sheetName) {
+  const out = new Map();
+  const files = wb && wb.files;
+  if (!files) return out;
+  const raw = (n) => { const f = files[n]; if (!f) return null; try { return Buffer.from(f.content || f._data || f); } catch { return null; } };
+  const text = (n) => { const b = raw(n); return b ? b.toString("utf8") : ""; };
+
+  // locate the drawing for this sheet, falling back to the only drawing in the package
+  const idx = Math.max(0, (wb.SheetNames || []).indexOf(sheetName));
+  let drawing = null;
+  const dm = text(`xl/worksheets/_rels/sheet${idx + 1}.xml.rels`).match(/Target="([^"]*drawings\/drawing\d+\.xml)"/i);
+  if (dm) drawing = dm[1].replace(/^\.\.\//, "xl/").replace(/^\/+/, "");
+  if (!drawing || !files[drawing]) drawing = Object.keys(files).find((n) => /^xl\/drawings\/drawing\d+\.xml$/i.test(n)) || null;
+  if (!drawing) return out;
+
+  const drawingXml = text(drawing);
+  const relsXml = text(drawing.replace(/([^/]+)$/, "_rels/$1.rels"));
+  const rid = {};
+  for (const m of relsXml.matchAll(/Id="(rId\d+)"[^>]*Target="([^"]+)"/gi)) {
+    let t = m[2].replace(/^\.\.\//, "xl/");
+    if (!t.startsWith("xl/")) t = "xl/" + t.replace(/^\/+/, "");
+    rid[m[1]] = t;
+  }
+  for (const a of drawingXml.matchAll(/<xdr:(one|two)CellAnchor[\s\S]*?<\/xdr:\1CellAnchor>/g)) {
+    const block = a[0];
+    const row = (block.match(/<xdr:from>[\s\S]*?<xdr:row>(\d+)<\/xdr:row>/) || [])[1];
+    const embed = (block.match(/r:embed="(rId\d+)"/) || [])[1];
+    if (row == null || !embed || !rid[embed]) continue;
+    const buffer = raw(rid[embed]);
+    if (!buffer || !buffer.length) continue;
+    const ext = (rid[embed].split(".").pop() || "png").toLowerCase();
+    const contentType = ext === "png" ? "image/png" : ext === "gif" ? "image/gif" : ext.startsWith("jp") ? "image/jpeg" : "application/octet-stream";
+    const dataRow = Number(row) - 1; // the header occupies sheet row 0
+    if (dataRow >= 0 && !out.has(dataRow)) out.set(dataRow, { buffer, ext, contentType });
+  }
+  return out;
+}
 
 /** Identity columns — matched by alias so any vendor's header spelling works. */
 const IDENTITY = {
@@ -264,8 +312,9 @@ async function preview(wb, { sheet = null } = {}) {
 async function importWorkbook(wb, { sheet = null, source_file = null, actor = null } = {}) {
   const dict = await dictSvc.load(true);
   const { data: disciplines } = await supabase.from("ceks_disciplines").select("code,name,attr_groups").order("sort_order");
-  const { headers, rows } = readSheet(wb, sheet);
+  const { headers, rows, name: sheetName } = readSheet(wb, sheet);
   const plan = await planColumns(headers, { dict, disciplines: disciplines || [] });
+  const embImgs = extractEmbeddedImages(wb, sheetName); // pictures pasted into cells, by data-row index
 
   const report = { products: rows.length, imported: 0, skipped: 0, attributes: 0, not_applicable_tally: {}, errors: [] };
 
@@ -291,9 +340,16 @@ async function importWorkbook(wb, { sheet = null, source_file = null, actor = nu
         origin: "excel",
       });
 
-      // a displayable image URL becomes the product image
-      if (image_url && draft?.model?.id) {
-        await supabase.from("ceks_models").update({ image_url }).eq("id", draft.model.id);
+      // product image: a displayable URL from the sheet, else a picture pasted into THIS row's cell
+      let img = image_url;
+      if (!img && embImgs.has(r)) {
+        try {
+          const e = embImgs.get(r);
+          img = await uploadBuffer(`images/xlsx/${crypto.randomUUID()}.${e.ext}`, e.buffer, e.contentType);
+        } catch (er) { console.warn("[excel] embedded image:", er.message); }
+      }
+      if (img && draft?.model?.id) {
+        await supabase.from("ceks_models").update({ image_url: img }).eq("id", draft.model.id);
       }
 
       // record the utilities this product explicitly does NOT need, so the UI hides those sections
@@ -322,4 +378,4 @@ async function loadPlanContext() {
   return { dict, disciplines: disciplines || [] };
 }
 
-module.exports = { preview, importWorkbook, planColumns, rowToProduct, readSheet, loadPlanContext, parseHeader, splitValueUnit, UNIT_TOKENS, unitKey };
+module.exports = { preview, importWorkbook, planColumns, rowToProduct, readSheet, loadPlanContext, parseHeader, splitValueUnit, UNIT_TOKENS, unitKey, extractEmbeddedImages };

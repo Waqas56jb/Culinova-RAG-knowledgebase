@@ -12,12 +12,14 @@
  */
 const express = require("express");
 const multer = require("multer");
+const crypto = require("crypto");
 const XLSX = require("xlsx");
 const { supabase } = require("../config/supabase");
 const { env } = require("../config/env");
 const auth = require("../services/auth");
 const productCatalog = require("../services/productCatalogImport");
 const { bulkCreateProducts } = require("../services/bulkCreate");
+const { uploadBuffer } = require("../services/storage");
 
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: env.uploadMaxFileMb * 1024 * 1024, files: 1 } });
@@ -37,7 +39,8 @@ const canIngest = auth.requirePermission("knowledge.ingest");
 /** Rows are parked in the job, so each batch call is stateless and can run on any instance. */
 router.post("/prepare", canIngest, upload.single("file"), wrap(async (req, res) => {
   if (!req.file) throw bad("Attach an .xlsx file.");
-  const wb = XLSX.read(req.file.buffer, { type: "buffer" });
+  // bookFiles:true keeps the raw package so we can recover pictures pasted into cells (see below).
+  const wb = XLSX.read(req.file.buffer, { type: "buffer", bookFiles: true });
   const sheetName = req.body.sheet || wb.SheetNames[0];
 
   const { headers, rows } = productCatalog.readSheet(wb, sheetName);
@@ -46,6 +49,20 @@ router.post("/prepare", canIngest, upload.single("file"), wrap(async (req, res) 
 
   // turn every row into a product payload ONCE, so batches are pure inserts
   const products = rows.map((r) => productCatalog.rowToProduct(r, plan));
+
+  // EMBEDDED IMAGES — pictures pasted into a cell live in the package, not in any cell text, so they
+  // were being lost. Pull each one, upload it to storage now, and attach the URL to its row's product
+  // (a small string that parks cleanly in the job); bulkCreate then sets it as the model image.
+  try {
+    const imgMap = productCatalog.extractEmbeddedImages(wb, sheetName);
+    for (const [rowIdx, img] of imgMap) {
+      const p = products[rowIdx];
+      if (!p || p.image_url) continue;
+      p.image_url = await uploadBuffer(`images/xlsx/${crypto.randomUUID()}.${img.ext}`, img.buffer, img.contentType);
+    }
+    if (imgMap.size) console.log(`[import-jobs/prepare] extracted ${imgMap.size} embedded image(s)`);
+  } catch (e) { console.warn("[import-jobs/prepare] embedded images:", e.message); }
+
   const usable = products.filter((p) => p.id.code || p.id.name);
 
   const naTally = {};
