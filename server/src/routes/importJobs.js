@@ -55,12 +55,15 @@ router.post("/prepare", canIngest, upload.single("file"), wrap(async (req, res) 
   // (a small string that parks cleanly in the job); bulkCreate then sets it as the model image.
   try {
     const imgMap = productCatalog.extractEmbeddedImages(wb, sheetName);
-    for (const [rowIdx, img] of imgMap) {
+    // Upload every image INDEPENDENTLY and in parallel — one failed/slow upload must never stop the
+    // rest (that whole-loop-abort bug is exactly what left only the first few products with a picture).
+    const results = await Promise.allSettled([...imgMap].map(async ([rowIdx, img]) => {
       const p = products[rowIdx];
-      if (!p || p.image_url) continue;
+      if (!p || p.image_url) return;
       p.image_url = await uploadBuffer(`images/xlsx/${crypto.randomUUID()}.${img.ext}`, img.buffer, img.contentType);
-    }
-    if (imgMap.size) console.log(`[import-jobs/prepare] extracted ${imgMap.size} embedded image(s)`);
+    }));
+    const failed = results.filter((r) => r.status === "rejected").length;
+    if (imgMap.size) console.log(`[import-jobs/prepare] embedded images: ${imgMap.size - failed}/${imgMap.size} uploaded${failed ? ` (${failed} failed)` : ""}`);
   } catch (e) { console.warn("[import-jobs/prepare] embedded images:", e.message); }
 
   const usable = products.filter((p) => p.id.code || p.id.name);
