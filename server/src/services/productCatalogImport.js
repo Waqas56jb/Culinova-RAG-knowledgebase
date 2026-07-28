@@ -62,6 +62,15 @@ const UNIT_TOKENS = new Set([
 ]);
 const unitKey = (s) => String(s).toLowerCase().replace(/[^a-z0-9°%]/g, "");
 
+// A parenthetical counts as a unit only if it IS, or CONTAINS, a recognised unit token — so "(mm)",
+// "(L×W×D mm)", "(kW)" are units, but "(Electric/Gas/Neutral)", "(NG/LPG)", "(Gravity/Pumped)",
+// "(approx)" are enum/qualifier hints, NOT units, and must stay in the field name.
+const looksLikeUnit = (u) => {
+  if (!u) return false;
+  if (UNIT_TOKENS.has(unitKey(u))) return true;
+  return String(u).split(/[\s×xX/·,+()\-]+/).some((t) => t && UNIT_TOKENS.has(unitKey(t)));
+};
+
 /**
  * Split ANY header into { name, unit, mandatory }. Generalized — no column names hardcoded:
  *   "Length (mm)*"          → { name: "Length", unit: "mm", mandatory: true }
@@ -77,7 +86,7 @@ function parseHeader(rawHeader) {
   name = name.replace(/\*/g, "").trim();
   let unit = null;
   const paren = name.match(/[([{]\s*([^()[\]{}]*?)\s*[)\]}]\s*$/); // trailing (mm), [°C], (L×W×D mm)
-  if (paren) {
+  if (paren && looksLikeUnit(paren[1])) {
     unit = paren[1].trim() || null;
     name = name.slice(0, paren.index).trim();
   } else {
