@@ -37,16 +37,18 @@ async function bulkCreateProducts(products, { origin = "excel", sourceDocument =
   if (!usable.length) return out;
 
   // ── 1. taxonomy — one resolve per DISTINCT category/type/brand (cached inside draft.js) ────────
+  // Brand = the manufacturer: a dedicated Brand/Manufacturer column wins, else the legacy Source Type.
+  const brandNameOf = (p) => p.id.brand || p.id.source || "CULINOVA";
   const brandOf = new Map(); // "cat|type|brand" → brand row
   for (const p of usable) {
-    const key = `${p.id.category || ""}|${p.id.type || ""}|${p.id.source || "CULINOVA"}`;
+    const key = `${p.id.category || ""}|${p.id.type || ""}|${brandNameOf(p)}`;
     if (brandOf.has(key)) continue;
     const category = await findOrCreateCategory(p.id.category);
     const type = await findOrCreateType(category.id, p.id.type);
-    const brand = await findOrCreateBrand(type.id, p.id.source || "CULINOVA");
+    const brand = await findOrCreateBrand(type.id, brandNameOf(p));
     brandOf.set(key, brand);
   }
-  const brandFor = (p) => brandOf.get(`${p.id.category || ""}|${p.id.type || ""}|${p.id.source || "CULINOVA"}`);
+  const brandFor = (p) => brandOf.get(`${p.id.category || ""}|${p.id.type || ""}|${brandNameOf(p)}`);
 
   // ── Family → Category → Model: derive Family for each distinct category from the master taxonomy
   //    (an explicit family on the row wins). Resolved once per distinct category, not per row. ──────
@@ -80,6 +82,8 @@ async function bulkCreateProducts(products, { origin = "excel", sourceDocument =
       model_number: code,
       display_name: p.id.name || code,
       description: p.id.description || null,
+      series: p.id.series || null,
+      power_type: p.id.power || null,
       image_url: p.image_url || null, // a displayable image from the sheet lands on the model row
     });
   }
@@ -121,6 +125,7 @@ async function bulkCreateProducts(products, { origin = "excel", sourceDocument =
       family: familyFor(p),
       category: p.id.category || null,
       equipment_type: p.id.type || null,
+      power_type: p.id.power || null,
       brand: b.name,
       model_number: code,
     };

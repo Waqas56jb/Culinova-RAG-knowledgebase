@@ -77,11 +77,14 @@ function extractEmbeddedImages(wb, sheetName) {
 
 /** Identity columns — matched by alias so any vendor's header spelling works. */
 const IDENTITY = {
-  code: ["product code", "code", "item code", "sku", "model number", "model", "rule id", "category code"],
+  code: ["product code", "code", "item code", "sku", "model number", "model", "model code", "rule id", "category code"],
   name: ["product name", "name", "description name", "item name", "title"],
   family: ["equipment family", "family"],
   category: ["product category", "category", "equipment category"],
-  type: ["product type", "type", "equipment type"],
+  type: ["product type", "type", "equipment type", "sub type", "subtype"],
+  brand: ["brand", "manufacturer", "brand manufacturer", "make"],
+  series: ["series", "line", "series line", "product series", "product line"],
+  power: ["power type", "power", "power source"],
   description: ["description use", "description", "use", "scope"],
   status: ["status"],
   source: ["source type", "source"],
@@ -332,7 +335,9 @@ async function importWorkbook(wb, { sheet = null, source_file = null, actor = nu
           family: id.family || null,
           category: id.category || null,
           equipment_type: id.type || null,
-          brand: id.source || "CULINOVA",
+          brand: id.brand || id.source || "CULINOVA",
+          series: id.series || null,
+          power_type: id.power || null,
         },
         attributes,
         notes: [
