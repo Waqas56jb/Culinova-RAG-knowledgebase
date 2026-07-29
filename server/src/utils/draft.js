@@ -32,13 +32,22 @@ let _taxoMap = null;
 async function loadTaxonomy() {
   if (_taxoMap) return _taxoMap;
   const { data } = await supabase.from("ceks_equipment_taxonomy").select("family, category");
-  _taxoMap = new Map((data || []).map((r) => [String(r.category).trim().toLowerCase(), r.family]));
+  const m = new Map(); // category(lower) → Set(families)
+  for (const r of data || []) {
+    const key = String(r.category).trim().toLowerCase();
+    if (!m.has(key)) m.set(key, new Set());
+    m.get(key).add(r.family);
+  }
+  _taxoMap = m;
   return _taxoMap;
 }
+// A category that belongs to exactly ONE family resolves; a category that appears under several
+// families (e.g. Deck Oven → Cooking OR Bakery) is AMBIGUOUS, so we return null rather than guess —
+// the explicit Family (the create form is Family-first, or an import's Family column) decides it.
 async function familyForCategory(categoryName) {
   if (!categoryName) return null;
-  const map = await loadTaxonomy();
-  return map.get(String(categoryName).trim().toLowerCase()) || null;
+  const fams = (await loadTaxonomy()).get(String(categoryName).trim().toLowerCase());
+  return fams && fams.size === 1 ? [...fams][0] : null;
 }
 
 async function findOrCreateCategory(name) {
