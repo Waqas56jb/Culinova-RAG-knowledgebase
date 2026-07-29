@@ -41,13 +41,31 @@ async function loadTaxonomy() {
   _taxoMap = m;
   return _taxoMap;
 }
+// distinct family names, cached — used to recognise a category that is really a family name.
+let _familyNames = null;
+async function loadFamilyNames() {
+  if (_familyNames) return _familyNames;
+  const { data } = await supabase.from("ceks_equipment_taxonomy").select("family");
+  _familyNames = [...new Set((data || []).map((r) => r.family).filter(Boolean))];
+  return _familyNames;
+}
+
 // A category that belongs to exactly ONE family resolves; a category that appears under several
 // families (e.g. Deck Oven → Cooking OR Bakery) is AMBIGUOUS, so we return null rather than guess —
 // the explicit Family (the create form is Family-first, or an import's Family column) decides it.
+// FALLBACK: AI extraction often returns the FAMILY as the category ("Cooking Equipment",
+// "Food Preparation Equipment", "Refrigeration"), so a value that names a family resolves to it.
 async function familyForCategory(categoryName) {
   if (!categoryName) return null;
-  const fams = (await loadTaxonomy()).get(String(categoryName).trim().toLowerCase());
-  return fams && fams.size === 1 ? [...fams][0] : null;
+  const c = String(categoryName).trim().toLowerCase();
+  const fams = (await loadTaxonomy()).get(c);
+  if (fams && fams.size === 1) return [...fams][0];
+  for (const f of await loadFamilyNames()) {
+    const fl = f.toLowerCase();
+    const core = fl.replace(/\s+equipment$/, ""); // "cooking", "food preparation", "beverage"
+    if (c === fl || c === core || c === core + " equipment") return f;
+  }
+  return null;
 }
 
 async function findOrCreateCategory(name) {
