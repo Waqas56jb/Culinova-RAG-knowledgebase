@@ -147,6 +147,12 @@ router.post("/:id/batch", canIngest, wrap(async (req, res) => {
     updated_at: new Date().toISOString(),
   }).eq("id", job.id);
 
+  // once the whole catalogue is in, link each code series' photo across its sizes (same code → same photo)
+  if (done) {
+    try { await require("../services/seriesImages").propagateSeriesImages(); }
+    catch (e) { console.warn("[import-jobs] series image link:", e.message); }
+  }
+
   // ETA measured from real throughput so far — not an invented number
   const perRow = processed > 0 ? msElapsed / processed : 0;
   const remaining = Math.max(0, job.total - processed);

@@ -370,6 +370,9 @@ async function importWorkbook(wb, { sheet = null, source_file = null, actor = nu
     }
   }
   report.source_file = source_file;
+  // SAME CODE → SAME PHOTO: link each series' photo across its sizes (blank images only).
+  try { report.images_linked = (await require("./seriesImages").propagateSeriesImages()).filled; }
+  catch (e) { console.warn("[importWorkbook] series image link:", e.message); }
   return report;
 }
 
