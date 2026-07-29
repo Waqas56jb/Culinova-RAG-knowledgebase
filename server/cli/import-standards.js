@@ -51,6 +51,15 @@ const FILES = [
       console.log(`  pending examples:`);
       out.pending_examples.slice(0, 6).forEach((p) => console.log(`    ${p.category} · ${p.attribute} = "${p.value}" (${p.kind})`));
     }
+
+    // STRUCTURAL WARNINGS — shifted/extra cells the client must fix in the source (never auto-corrected)
+    const sw = out.structural_warnings || [];
+    if (sw.length) {
+      console.log(`  ⚠ STRUCTURAL WARNINGS (${sw.length} row(s) — fix these cells in the spreadsheet, then re-upload):`);
+      sw.forEach((w) => w.issues.forEach((iss) => console.log(`      row ${w.row} · ${w.code}: ${iss}`)));
+    } else {
+      console.log(`  ✓ no structural (shifted/extra cell) warnings`);
+    }
   }
 
   // Backfill: link EXISTING equipment to its standard where the type is an exact match. Safe —

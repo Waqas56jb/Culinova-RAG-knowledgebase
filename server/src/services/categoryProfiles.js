@@ -16,6 +16,71 @@ const dictSvc = require("./params");
 const clean = (v) => (v == null ? null : String(v).trim() || null);
 const nowIso = () => new Date().toISOString();
 
+// ── STATUS SAFETY ────────────────────────────────────────────────────────────
+// A profile's status is a controlled word, not free text. If a cell in the status column is neither
+// blank, "Approved", nor one of these known words, it is almost certainly a shifted/misplaced cell
+// (see detectStructuralIssues) — so we store the safe default "draft" rather than letting a sentence
+// like "Dedicated cold-room temperature…" masquerade as a status in the source of truth. We NEVER
+// guess the real value; we only refuse to store an obviously-wrong one.
+const KNOWN_STATUS = new Set([
+  "approved", "draft", "pending", "in review", "in-review", "under review", "for review", "review",
+  "retired", "deprecated", "archived", "active", "inactive", "final", "released", "published",
+  "proposed", "in progress", "in-progress", "wip", "submitted", "verified", "on hold", "superseded",
+  "obsolete", "rejected",
+]);
+function normalizeStatus(raw) {
+  const s = clean(raw);
+  if (!s) return "draft";
+  if (/approv/i.test(s)) return "approved";
+  const low = s.toLowerCase();
+  return KNOWN_STATUS.has(low) ? low : "draft";
+}
+function statusLooksWrong(raw) {
+  const s = clean(raw);
+  if (!s) return false;               // empty is fine → draft
+  if (/approv/i.test(s)) return false;
+  return !KNOWN_STATUS.has(s.toLowerCase());
+}
+function versionLooksWrong(raw) {
+  const s = clean(raw);
+  if (!s) return false;               // empty version is allowed
+  return !/\d/.test(s);               // a "version" with no digit ("Approved") is a shifted cell
+}
+// A→Z, AA→… column letter for human-readable warnings.
+function colLetter(i) {
+  let s = "", n = i;
+  do { s = String.fromCharCode(65 + (n % 26)) + s; n = Math.floor(n / 26) - 1; } while (n >= 0);
+  return s;
+}
+
+/**
+ * Catch STRUCTURAL corruption WITHOUT guessing a fix — a whole class of "one value in the wrong
+ * column" mistakes the client's spreadsheets can carry (a stray/extra cell shifts a row's tail):
+ *   • any data sitting under a BLANK (un-named) header column  → a cell in that row is shifted or extra
+ *   • a Status cell that is not a recognised status word
+ *   • a Version cell with no digit in it
+ * Each is reported against its row so a human fixes the source and re-uploads. Nothing is auto-shifted.
+ */
+function detectStructuralIssues(headers, rows, identityIndex) {
+  const warnings = [];
+  const blankCols = headers.map((h, i) => (clean(h) ? -1 : i)).filter((i) => i >= 0);
+  for (let r = 0; r < rows.length; r++) {
+    const row = rows[r] || [];
+    const code = clean(row[identityIndex.code]) || clean(row[identityIndex.category_name]) || `row ${r + 2}`;
+    const issues = [];
+    for (const c of blankCols) {
+      const v = clean(row[c]);
+      if (v) issues.push(`value "${v}" sits under blank column ${colLetter(c)} — a cell in this row is shifted or extra`);
+    }
+    if (identityIndex.status != null && statusLooksWrong(row[identityIndex.status]))
+      issues.push(`Status = "${clean(row[identityIndex.status])}" is not a recognised status — the row's tail columns look shifted`);
+    if (identityIndex.version != null && versionLooksWrong(row[identityIndex.version]))
+      issues.push(`Version = "${clean(row[identityIndex.version])}" does not look like a version`);
+    if (issues.length) warnings.push({ row: r + 2, code, issues });
+  }
+  return warnings;
+}
+
 /**
  * Header → identity field. The rest of the columns become classified attributes.
  *
@@ -125,7 +190,6 @@ function planColumns(headers) {
 
 function buildProfile(row, identityIndex, domain, sourceFile) {
   const at = (k) => (identityIndex[k] != null ? clean(row[identityIndex[k]]) : null);
-  const statusRaw = at("status");
   return {
     domain,
     code: at("code") || at("category_name"),
@@ -134,7 +198,7 @@ function buildProfile(row, identityIndex, domain, sourceFile) {
     engineering_group: at("engineering_group"),
     classifier: at("classifier"),
     engineer_approval_required: /^(y|yes|true|required)$/i.test(at("approval") || ""),
-    status: statusRaw && /approv/i.test(statusRaw) ? "approved" : (statusRaw || "draft").toLowerCase(),
+    status: normalizeStatus(at("status")),
     version: at("version"),
     commissioning_checklist: at("commissioning"),
     notes: at("notes"),
@@ -172,7 +236,7 @@ async function preview(wb, { domain, sheet = null } = {}) {
   const { headers, rows } = readSheet(wb, sheet);
   const { identityIndex, identityCols } = planColumns(headers);
 
-  const summary = { domain, columns: headers.length, categories: rows.length, by_directive: {}, pending_examples: [], sample: [] };
+  const summary = { domain, columns: headers.length, categories: rows.length, by_directive: {}, pending_examples: [], sample: [], structural_warnings: detectStructuralIssues(headers, rows, identityIndex) };
   for (const row of rows) {
     const profile = buildProfile(row, identityIndex, domain, null);
     if (!profile.code && !profile.category_name) continue;
@@ -197,7 +261,7 @@ async function importWorkbook(wb, { domain, sheet = null, source_file = null, us
   const { headers, rows } = readSheet(wb, sheet);
   const { identityIndex, identityCols } = planColumns(headers);
 
-  const report = { domain, source_file, profiles: 0, updated: 0, attributes: 0, pending_refs: 0, pending_calcs: 0, by_directive: {}, errors: [] };
+  const report = { domain, source_file, profiles: 0, updated: 0, attributes: 0, pending_refs: 0, pending_calcs: 0, by_directive: {}, errors: [], structural_warnings: detectStructuralIssues(headers, rows, identityIndex) };
 
   for (let r = 0; r < rows.length; r++) {
     const row = rows[r];
@@ -380,5 +444,6 @@ async function forEntry(entry) {
 
 module.exports = {
   classifyCell, preview, importWorkbook, readSheet, planColumns,
+  buildProfile, buildAttributes, detectStructuralIssues, normalizeStatus,
   matchCandidates, resolveForEntry, applyProfile, forEntry, autoLink,
 };

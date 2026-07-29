@@ -255,120 +255,149 @@ function DirectiveSection({ dir, rows }) {
 }
 
 // ═════════════════════════════════════ IMPORT ════════════════════════════════
+const KNOWN_DOMAINS = ["cooking", "refrigeration", "food_preparation", "warewashing", "ice_machines"];
+
+// The domain is inferred from each workbook's file name so a bulk drop of the CULINOVA standards
+// files "just works". It's always editable — a name we don't recognise is left blank for the user
+// to set rather than guessing wrong.
+function detectDomain(filename) {
+  const n = (filename || "").toLowerCase();
+  if (/refriger/.test(n)) return "refrigeration";
+  if (/food[\s_-]*prep/.test(n)) return "food_preparation";
+  if (/warewash|dishwash/.test(n)) return "warewashing";
+  if (/ice[\s_-]*(machine|maker)|\bice\b/.test(n)) return "ice_machines";
+  if (/cook/.test(n)) return "cooking";
+  return "";
+}
+
 function StandardsImport({ canImport }) {
-  const [domain, setDomain] = useState("");
-  const [file, setFile] = useState(null);
-  const [preview, setPreview] = useState(null);
-  const [result, setResult] = useState(null);
+  const [items, setItems] = useState([]); // {id,file,name,domain,status,result,error}
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const [note, setNote] = useState("");
 
   if (!canImport) {
     return <div className="group"><EmptyState icon="🔒" title="Import not permitted" text="You need the rule.create permission to import Engineering Standards workbooks." /></div>;
   }
 
-  async function doPreview() {
-    if (!file) return setError("Choose the .xlsx workbook first.");
-    setBusy(true); setError(""); setResult(null);
-    try { setPreview(await api.standardsImportPreview(file, domain || null)); }
-    catch (e) { setError(e.message); }
-    finally { setBusy(false); }
+  const updateItem = (id, patch) => setItems((xs) => xs.map((x) => (x.id === id ? { ...x, ...patch } : x)));
+
+  function onPick(fileList) {
+    const picked = Array.from(fileList || []);
+    setNote("");
+    setItems(picked.map((file, i) => ({
+      id: `${file.name}::${file.size}::${i}`,
+      file, name: file.name,
+      domain: detectDomain(file.name),
+      status: "queued", result: null, error: "",
+    })));
   }
 
-  async function doCommit() {
-    setBusy(true); setError("");
-    try { setResult(await api.standardsImportCommit(file, domain || null)); setPreview(null); }
-    catch (e) { setError(e.message); }
-    finally { setBusy(false); }
+  // Import EVERY selected file, strictly one after another. A failure is recorded against its own
+  // row and the loop carries on — one bad file never blocks the rest. Re-importing updates in place.
+  async function importAll() {
+    if (!items.length) return;
+    if (items.some((x) => !x.domain)) { setNote("Every file needs a domain — set the blank ones, then Import."); return; }
+    setBusy(true); setNote("");
+    for (const it of items) {
+      updateItem(it.id, { status: "importing", error: "", result: null });
+      try {
+        const res = await api.standardsImportCommit(it.file, it.domain);
+        updateItem(it.id, { status: "done", result: res });
+      } catch (e) {
+        updateItem(it.id, { status: "failed", error: e.message });
+      }
+    }
+    setBusy(false);
   }
+
+  const allSettled = items.length > 0 && items.every((x) => x.status === "done" || x.status === "failed");
+  const okCount = items.filter((x) => x.status === "done").length;
 
   return (
     <div className="group">
       <p className="hint">
-        Step 1 — pick the domain (Cooking / Refrigeration, or type your own) and the standards workbook. Step 2 — preview:
-        every column is classified into a directive and nothing is written until you commit. Columns that reference an
-        unprovided rule table or formula are imported as <b>pending</b>.
+        Select <b>one or many</b> standards workbooks at once — each file's domain is auto-detected from its name
+        (editable below). Files import <b>one by one</b>; a problem with one never stops the others, and re-importing a
+        category updates it (no duplicates). Columns referencing an unprovided rule table or formula import as <b>pending</b>.
       </p>
 
       <div className="filter-row">
-        <input list="std-import-domains" placeholder="domain (cooking / refrigeration)" value={domain} onChange={(e) => setDomain(e.target.value)} />
-        <datalist id="std-import-domains">
-          <option value="cooking" />
-          <option value="refrigeration" />
-        </datalist>
-        <input type="file" accept=".xlsx,.xls" onChange={(e) => { setFile(e.target.files?.[0] || null); setPreview(null); setResult(null); setError(""); }} />
-        <button className="btn primary" disabled={busy || !file} onClick={doPreview}>{busy ? "Reading…" : "Preview import"}</button>
+        <input type="file" accept=".xlsx,.xls" multiple disabled={busy} onChange={(e) => onPick(e.target.files)} />
+        <button className="btn primary" disabled={busy || !items.length} onClick={importAll}>
+          {busy ? "Importing…" : `Import ${items.length || ""} file${items.length === 1 ? "" : "s"}`.trim()}
+        </button>
+        {items.length > 0 && !busy && <button className="btn small ghost" onClick={() => setItems([])}>Clear</button>}
       </div>
-      {error && <div className="alert">{error}</div>}
+      {note && <div className="alert">{note}</div>}
 
-      {preview && (
-        <div className="group">
-          <h2>Preview{preview.domain ? ` — ${titleCase(preview.domain)}` : ""}</h2>
-          <div className="std-pills">
-            <StatPill>{(preview.categories ?? 0)} categor{(preview.categories === 1) ? "y" : "ies"}</StatPill>
-            <StatPill>{(preview.columns ?? 0)} column{preview.columns === 1 ? "" : "s"}</StatPill>
-          </div>
+      <datalist id="std-import-domains">
+        {KNOWN_DOMAINS.map((d) => <option key={d} value={d} />)}
+      </datalist>
 
-          <ByDirective by={preview.by_directive} />
-
-          {(preview.pending_examples || []).length > 0 && (
-            <>
-              <div className="warn">⚠ Examples of columns that will import as <b>pending</b> (awaiting rule tables / formulas):</div>
-              <div className="scroll-x">
-                <table className="grid">
-                  <thead><tr><th>Category</th><th>Attribute</th><th>Value</th><th>Kind</th></tr></thead>
-                  <tbody>
-                    {preview.pending_examples.map((x, i) => (
-                      <tr key={i} className="std-pending">
-                        <td>{x.category || "—"}</td><td>{x.attribute || "—"}</td>
-                        <td>{x.value || "—"}</td>
-                        <td><span className="badge pending">{DIRECTIVE_LABEL[x.kind] || x.kind || "pending"}</span></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </>
-          )}
-
-          {(preview.sample || []).length > 0 && (
-            <>
-              <h2 style={{ marginTop: 14 }}>Sample of what will be created</h2>
-              <div className="scroll-x">
-                <table className="grid">
-                  <thead><tr><th>Code</th><th>Category</th><th>Attributes</th></tr></thead>
-                  <tbody>
-                    {preview.sample.map((s, i) => (
-                      <tr key={i}>
-                        <td className="mono">{s.code || "—"}</td>
-                        <td>{s.category || "—"}</td>
-                        <td>{Array.isArray(s.attributes) ? s.attributes.length : (s.attributes ?? "—")}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </>
-          )}
-
-          <div className="decision">
-            <button className="btn primary" disabled={busy} onClick={doCommit}>{busy ? "Importing…" : "Commit import"}</button>
-            <span className="muted">Creates / updates category profiles and their attributes. Pending references are recorded for later.</span>
-          </div>
+      {items.length > 0 && (
+        <div className="scroll-x">
+          <table className="grid">
+            <thead><tr><th>#</th><th>File</th><th>Domain</th><th>Status</th><th>Result</th></tr></thead>
+            <tbody>
+              {items.map((it, i) => (
+                <tr key={it.id}>
+                  <td>{i + 1}</td>
+                  <td className="mono" style={{ maxWidth: 240, overflowWrap: "anywhere" }}>{it.name}</td>
+                  <td>
+                    <input list="std-import-domains" value={it.domain} disabled={busy} placeholder="set domain"
+                      style={{ width: 150 }}
+                      onChange={(e) => updateItem(it.id, { domain: e.target.value.trim().toLowerCase() })} />
+                  </td>
+                  <td><ImportStatus status={it.status} /></td>
+                  <td><ImportResult item={it} /></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
 
-      {result && (
-        <div className="group">
-          <div className="notice">
-            ✓ Imported — {result.profiles ?? 0} profile(s) created, {result.updated ?? 0} updated, {result.attributes ?? 0} attribute(s) written.
-          </div>
-          <div className="std-pills">
-            {result.pending_refs != null && <StatPill>{result.pending_refs} pending rule reference(s)</StatPill>}
-            {result.pending_calcs != null && <StatPill>{result.pending_calcs} pending calculation(s)</StatPill>}
-          </div>
-          <ByDirective by={result.by_directive} />
-          {(result.errors || []).map((e, i) => <div key={i} className="alert">{typeof e === "string" ? e : (e.error || JSON.stringify(e))}</div>)}
+      {allSettled && (
+        <div className={okCount === items.length ? "notice" : "warn"} style={{ marginTop: 10 }}>
+          {okCount === items.length ? "✓" : "⚠"} Imported {okCount}/{items.length} file(s).
+          {okCount !== items.length ? " See the failed row(s) above." : ""}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ImportStatus({ status }) {
+  if (status === "importing") return <span className="badge pending">⏳ Importing…</span>;
+  if (status === "done") return <span className="badge approved">✓ Done</span>;
+  if (status === "failed") return <span className="badge" style={{ background: "#c0392b", color: "#fff" }}>✗ Failed</span>;
+  return <span className="muted">• Queued</span>;
+}
+
+function ImportResult({ item }) {
+  if (item.status === "failed") return <span style={{ color: "#c0392b" }}>{item.error}</span>;
+  const r = item.result;
+  if (!r) return <span className="muted">—</span>;
+  const sw = r.structural_warnings || [];
+  const errs = r.errors || [];
+  return (
+    <div>
+      <div><b>{r.profiles ?? 0}</b> created · <b>{r.updated ?? 0}</b> updated · <b>{r.attributes ?? 0}</b> attributes</div>
+      {(r.pending_refs || r.pending_calcs)
+        ? <div className="muted">{r.pending_refs || 0} pending rule ref · {r.pending_calcs || 0} pending calc</div>
+        : null}
+      <ByDirective by={r.by_directive} />
+      {sw.length > 0 && (
+        <div className="warn" style={{ marginTop: 6 }}>
+          ⚠ {sw.length} row(s) look shifted — fix these cells in the file &amp; re-upload:
+          <ul style={{ margin: "4px 0 0", paddingLeft: 18 }}>
+            {sw.slice(0, 8).map((w, k) => <li key={k}><b>{w.code}</b> (row {w.row}): {(w.issues || []).join("; ")}</li>)}
+          </ul>
+        </div>
+      )}
+      {errs.length > 0 && (
+        <div className="alert" style={{ marginTop: 6 }}>
+          {errs.slice(0, 4).map((e, k) => <div key={k}>{typeof e === "string" ? e : (e.error || JSON.stringify(e))}</div>)}
         </div>
       )}
     </div>
