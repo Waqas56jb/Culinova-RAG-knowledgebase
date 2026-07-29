@@ -79,6 +79,7 @@ function extractEmbeddedImages(wb, sheetName) {
 const IDENTITY = {
   code: ["product code", "code", "item code", "sku", "model number", "model", "rule id", "category code"],
   name: ["product name", "name", "description name", "item name", "title"],
+  family: ["equipment family", "family"],
   category: ["product category", "category", "equipment category"],
   type: ["product type", "type", "equipment type"],
   description: ["description use", "description", "use", "scope"],
@@ -328,6 +329,7 @@ async function importWorkbook(wb, { sheet = null, source_file = null, actor = nu
           model_number: id.code || id.name,
           display_name: id.name || id.code,
           description: id.description || null,
+          family: id.family || null,
           category: id.category || null,
           equipment_type: id.type || null,
           brand: id.source || "CULINOVA",

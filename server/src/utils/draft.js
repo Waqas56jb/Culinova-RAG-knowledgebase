@@ -22,6 +22,25 @@ async function insertOne(table, row) {
 // in-memory caches to avoid re-resolving the same hierarchy on every row of a bulk import
 const _cache = { cat: new Map(), type: new Map(), brand: new Map() };
 
+/**
+ * Family is DERIVED from Category through the master taxonomy (ceks_equipment_taxonomy) so the two
+ * levels of Family → Category → Model can never drift apart. The map is loaded once per process and
+ * cached (a deploy/restart refreshes it after the client edits the taxonomy). An explicit family on
+ * the payload always wins over the derived one.
+ */
+let _taxoMap = null;
+async function loadTaxonomy() {
+  if (_taxoMap) return _taxoMap;
+  const { data } = await supabase.from("ceks_equipment_taxonomy").select("family, category");
+  _taxoMap = new Map((data || []).map((r) => [String(r.category).trim().toLowerCase(), r.family]));
+  return _taxoMap;
+}
+async function familyForCategory(categoryName) {
+  if (!categoryName) return null;
+  const map = await loadTaxonomy();
+  return map.get(String(categoryName).trim().toLowerCase()) || null;
+}
+
 async function findOrCreateCategory(name) {
   const clean = name || "Uncategorized";
   const key = clean.toLowerCase();
@@ -141,8 +160,11 @@ async function persistDraft({ model = {}, attributes = [], notes = [], origin = 
   const brandKnown = brand.name && brand.name.toLowerCase() !== "unknown";
   const title = brandKnown ? `${brand.name} ${modelRow.model_number}` : (model.display_name || modelRow.model_number);
   const attrOrigin = origin === "ai_pdf" ? "ai_extracted" : origin === "excel" ? "excel" : "manual";
+  // Family → Category → Model: an explicit family wins, otherwise it is derived from the category.
+  const family = model.family || (await familyForCategory(category.name));
   // denormalized identity for fast admin search/filter/sort
   const identityFields = {
+    family,
     category: category.name,
     brand: brand.name,
     equipment_type: type.name,
@@ -287,12 +309,14 @@ async function updateEntryIdentity(entryId, id) {
 
   const brandKnown = brand.name && brand.name.toLowerCase() !== "unknown";
   const title = brandKnown ? `${brand.name} ${id.model_number}` : id.display_name || id.model_number;
+  const family = id.family || (await familyForCategory(category.name));
   await supabase
     .from("ceks_knowledge_entries")
     .update({
       title,
       code: id.model_number,
       summary: id.description ?? null,
+      family,
       category: category.name,
       brand: brand.name,
       equipment_type: type.name,
@@ -302,11 +326,11 @@ async function updateEntryIdentity(entryId, id) {
     })
     .eq("id", entryId);
 
-  return { title, category: category.name, brand: brand.name, equipment_type: type.name };
+  return { title, family, category: category.name, brand: brand.name, equipment_type: type.name };
 }
 
 module.exports = {
   persistDraft, updateEntryIdentity, slug,
   // exported so a bulk importer can resolve the same taxonomy without duplicating this logic
-  findOrCreateCategory, findOrCreateType, findOrCreateBrand,
+  findOrCreateCategory, findOrCreateType, findOrCreateBrand, familyForCategory,
 };

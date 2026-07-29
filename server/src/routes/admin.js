@@ -10,13 +10,13 @@ router.use(express.json({ limit: "1mb" }));
 const canRead = auth.requirePermission("knowledge.read");
 const canApprove = auth.requirePermission("knowledge.approve");
 
-const SORTABLE = ["title", "created_at", "updated_at", "current_status", "brand", "category", "model_number"];
+const SORTABLE = ["title", "created_at", "updated_at", "current_status", "family", "brand", "category", "model_number"];
 const UNSPECIFIED = "Unspecified"; // must match the NULL label used by ceks_entry_stats()
 
 /** GET /api/admin/entries — search + filter + sort + paginate over all entries. */
 router.get("/entries", canRead, async (req, res) => {
   try {
-    const { search, status, brand, category, equipment_type, power_type, origin } = req.query;
+    const { search, status, family, brand, category, equipment_type, power_type, origin } = req.query;
     const sort = SORTABLE.includes(req.query.sort) ? req.query.sort : "updated_at";
     const order = req.query.order === "asc";
     const page = Math.max(1, parseInt(req.query.page || "1", 10));
@@ -33,6 +33,7 @@ router.get("/entries", canRead, async (req, res) => {
       if (!val) return query;
       return val === UNSPECIFIED ? query.is(col, null) : query.eq(col, val);
     };
+    q = applyFacet(q, "family", family);
     q = applyFacet(q, "brand", brand);
     q = applyFacet(q, "category", category);
     q = applyFacet(q, "equipment_type", equipment_type);
@@ -83,8 +84,9 @@ router.get("/filters", canRead, async (req, res) => {
   try {
     // Dependent facets computed in the database (DISTINCT ... WHERE upstream filters), NOT by pulling
     // the whole table into Node — which PostgREST silently caps at 1000 rows, making facets wrong.
-    const { category, brand, equipment_type } = req.query;
+    const { family, category, brand, equipment_type } = req.query;
     const { data, error } = await supabase.rpc("ceks_entry_facets", {
+      p_family: family || null,
       p_category: category || null,
       p_brand: brand || null,
       p_type: equipment_type || null,
@@ -93,6 +95,32 @@ router.get("/filters", canRead, async (req, res) => {
     res.json(data);
   } catch (err) {
     console.error("[admin/filters]", err.message);
+    res.status(500).json({ error: "Something went wrong." });
+  }
+});
+
+/**
+ * GET /api/admin/taxonomy — the master Family → Category map (from ceks_equipment_taxonomy).
+ * Drives the cascading Family → Category dropdowns on the create/import screens so every item is
+ * filed under the correct level and the two can never be mixed.
+ */
+router.get("/taxonomy", canRead, async (_req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from("ceks_equipment_taxonomy")
+      .select("family, category, sort_order")
+      .order("family", { ascending: true })
+      .order("sort_order", { ascending: true });
+    if (error) throw new Error(error.message);
+    const families = [];
+    const categoriesByFamily = {};
+    for (const r of data || []) {
+      if (!categoriesByFamily[r.family]) { categoriesByFamily[r.family] = []; families.push(r.family); }
+      categoriesByFamily[r.family].push(r.category);
+    }
+    res.json({ families, categoriesByFamily });
+  } catch (err) {
+    console.error("[admin/taxonomy]", err.message);
     res.status(500).json({ error: "Something went wrong." });
   }
 });

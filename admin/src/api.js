@@ -167,6 +167,7 @@ export const api = {
   deleteEntry: (id) => f(`/api/entries/${id}`, { method: "DELETE" }),
   adminEntries: (params) => f(`/api/admin/entries?${new URLSearchParams(params)}`),
   adminFilters: (params) => f(`/api/admin/filters?${new URLSearchParams(params || {})}`),
+  adminTaxonomy: () => f(`/api/admin/taxonomy`),
   updateIdentity: (id, body) => jf(`/api/entries/${id}/identity`, body, "PATCH"),
   adminStats: () => f(`/api/admin/stats`),
   bulkApprove: (ids) => jf(`/api/admin/bulk-approve`, { ids }),

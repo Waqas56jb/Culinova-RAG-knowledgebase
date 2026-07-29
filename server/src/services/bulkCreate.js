@@ -14,7 +14,7 @@
  * and only the genuinely new ones are inserted.
  */
 const { supabase } = require("../config/supabase");
-const { findOrCreateCategory, findOrCreateType, findOrCreateBrand, slug } = require("../utils/draft");
+const { findOrCreateCategory, findOrCreateType, findOrCreateBrand, familyForCategory, slug } = require("../utils/draft");
 
 const clean = (v) => (v == null ? null : String(v).trim() || null);
 
@@ -47,6 +47,15 @@ async function bulkCreateProducts(products, { origin = "excel", sourceDocument =
     brandOf.set(key, brand);
   }
   const brandFor = (p) => brandOf.get(`${p.id.category || ""}|${p.id.type || ""}|${p.id.source || "CULINOVA"}`);
+
+  // ── Family → Category → Model: derive Family for each distinct category from the master taxonomy
+  //    (an explicit family on the row wins). Resolved once per distinct category, not per row. ──────
+  const familyByCat = new Map();
+  for (const p of usable) {
+    const cat = p.id.category || "";
+    if (!familyByCat.has(cat)) familyByCat.set(cat, await familyForCategory(cat));
+  }
+  const familyFor = (p) => p.id.family || familyByCat.get(p.id.category || "") || null;
 
   // ── 2. models — reuse what exists, insert only the new ones ────────────────────────────────────
   const codes = [...new Set(usable.map((p) => p.id.code || p.id.name))];
@@ -108,6 +117,7 @@ async function bulkCreateProducts(products, { origin = "excel", sourceDocument =
       summary: p.id.description || null,
       current_status: "draft",
       origin,
+      family: familyFor(p),
       category: p.id.category || null,
       equipment_type: p.id.type || null,
       brand: b.name,

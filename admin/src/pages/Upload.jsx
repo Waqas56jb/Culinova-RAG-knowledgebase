@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { api } from "../api.js";
 import { Btn } from "../components/Loader.jsx";
 import { PageHero, PagePanel } from "../components/PageShell.jsx";
@@ -68,27 +68,26 @@ const M_SECTIONS = [
   ["connection_point", "MEP Connection Points"],
   ["installation", "Installation"],
 ];
-const M_IDENTITY = [
-  ["brand", "Brand *"], ["category", "Category *"], ["equipment_type", "Equipment Type *"],
-  ["series", "Series / Line"], ["model_number", "Model *"],
-];
-
 function ManualUpload({ onDone }) {
-  const [m, setM] = useState({ brand: "", category: "", equipment_type: "", series: "", model_number: "", power_type: "", description: "" });
+  const [taxo, setTaxo] = useState({ families: [], categoriesByFamily: {} });
+  const [m, setM] = useState({ family: "", brand: "", category: "", equipment_type: "", series: "", model_number: "", power_type: "", description: "" });
   const [rows, setRows] = useState([{ attr_group: "technical_specification", name: "", value: "", unit: "" }]);
   const [notes, setNotes] = useState("");
   const [image, setImage] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
+  // the Family → Category map that drives the two cascading dropdowns (single source of truth)
+  useEffect(() => { api.adminTaxonomy().then(setTaxo).catch(() => {}); }, []);
   function setField(k, v) { setM((x) => ({ ...x, [k]: v })); }
+  function setFamily(v) { setM((x) => ({ ...x, family: v, category: "" })); } // new family resets the category
   function setRow(i, k, v) { setRows((rs) => rs.map((r, idx) => (idx === i ? { ...r, [k]: v } : r))); }
   function addRow() { setRows((rs) => [...rs, { attr_group: rs[rs.length - 1]?.attr_group || "technical_specification", name: "", value: "", unit: "" }]); }
   function delRow(i) { setRows((rs) => rs.filter((_, idx) => idx !== i)); }
 
   async function submit() {
-    if (!m.model_number.trim() || !m.brand.trim() || !m.category.trim() || !m.equipment_type.trim()) {
-      setError("Brand, Category, Equipment Type and Model are required."); return;
+    if (!m.family.trim() || !m.category.trim() || !m.brand.trim() || !m.model_number.trim()) {
+      setError("Family, Category, Brand and Model are required."); return;
     }
     setBusy(true); setError("");
     try {
@@ -108,10 +107,24 @@ function ManualUpload({ onDone }) {
         <div className="manual-top-fields">
           <h2>Identity</h2>
       <div className="manual-identity">
-        {M_IDENTITY.map(([k, label]) => (
-          <div key={k} className="ifield"><span className="ilabel">{label}</span>
-            <input value={m[k]} onChange={(e) => setField(k, e.target.value)} /></div>
-        ))}
+        <div className="ifield"><span className="ilabel">Equipment Family *</span>
+          <select value={m.family} onChange={(e) => setFamily(e.target.value)}>
+            <option value="">— Select family —</option>
+            {(taxo.families || []).map((fam) => <option key={fam} value={fam}>{fam}</option>)}
+          </select></div>
+        <div className="ifield"><span className="ilabel">Equipment Category *</span>
+          <select value={m.category} disabled={!m.family} onChange={(e) => setField("category", e.target.value)}>
+            <option value="">{m.family ? "— Select category —" : "Select a family first"}</option>
+            {(taxo.categoriesByFamily[m.family] || []).map((cat) => <option key={cat} value={cat}>{cat}</option>)}
+          </select></div>
+        <div className="ifield"><span className="ilabel">Brand *</span>
+          <input value={m.brand} onChange={(e) => setField("brand", e.target.value)} /></div>
+        <div className="ifield"><span className="ilabel">Model *</span>
+          <input value={m.model_number} onChange={(e) => setField("model_number", e.target.value)} /></div>
+        <div className="ifield"><span className="ilabel">Equipment Type</span>
+          <input value={m.equipment_type} onChange={(e) => setField("equipment_type", e.target.value)} placeholder="optional sub-type" /></div>
+        <div className="ifield"><span className="ilabel">Series / Line</span>
+          <input value={m.series} onChange={(e) => setField("series", e.target.value)} /></div>
         <div className="ifield"><span className="ilabel">Power Type</span>
           <select value={m.power_type} onChange={(e) => setField("power_type", e.target.value)}>
             <option value="">—</option><option>Electric</option><option>Gas</option><option>Neutral</option>

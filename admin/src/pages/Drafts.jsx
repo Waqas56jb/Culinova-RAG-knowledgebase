@@ -13,19 +13,19 @@ export default function Drafts({ onOpen, initialFilter }) {
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [filters, setFilters] = useState({ brand: [], category: [], equipment_type: [], power_type: [] });
+  const [filters, setFilters] = useState({ family: [], brand: [], category: [], equipment_type: [], power_type: [] });
   const [sel, setSel] = useState(new Set());
-  const [f, setF] = useState({ search: "", status: "pending", brand: "", category: "", equipment_type: "", power_type: "", sort: "updated_at", order: "desc", ...(initialFilter || {}) });
+  const [f, setF] = useState({ search: "", status: "pending", family: "", brand: "", category: "", equipment_type: "", power_type: "", sort: "updated_at", order: "desc", ...(initialFilter || {}) });
   const [searchText, setSearchText] = useState(f.search || ""); // immediate input value, debounced into f.search
   const [modal, setModal] = useState(null);   // { type: "bulk-approve" } | { type: "delete", item }
   const [busy, setBusy] = useState(false);     // modal action in flight
   const [notice, setNotice] = useState(null);  // bulk-approve result: { approved, total }
   const reqId = useRef(0);                      // guards against out-of-order responses
 
-  // dependent filters: narrow options by the current category → brand → type selection
+  // dependent filters: narrow options by the current family → category → brand → type selection
   useEffect(() => {
-    api.adminFilters({ category: f.category, brand: f.brand, equipment_type: f.equipment_type }).then(setFilters).catch(() => {});
-  }, [f.category, f.brand, f.equipment_type]);
+    api.adminFilters({ family: f.family, category: f.category, brand: f.brand, equipment_type: f.equipment_type }).then(setFilters).catch(() => {});
+  }, [f.family, f.category, f.brand, f.equipment_type]);
 
   // debounce the search box ~300ms before it feeds the load effect, so typing
   // doesn't fire a request on every keystroke
@@ -55,6 +55,7 @@ export default function Drafts({ onOpen, initialFilter }) {
   function setField(k, v) {
     setF((x) => {
       const n = { ...x, [k]: v };
+      if (k === "family") { n.category = ""; n.brand = ""; n.equipment_type = ""; n.power_type = ""; }
       if (k === "category") { n.brand = ""; n.equipment_type = ""; n.power_type = ""; }
       if (k === "brand") { n.equipment_type = ""; n.power_type = ""; }
       if (k === "equipment_type") { n.power_type = ""; }
@@ -117,6 +118,7 @@ export default function Drafts({ onOpen, initialFilter }) {
         <select value={f.status} onChange={(e) => setField("status", e.target.value)} aria-label="Filter by status">
           {STATUS_OPTS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
         </select>
+        <Dropdown k="family" label="Family" />
         <Dropdown k="category" label="Category" />
         <Dropdown k="brand" label="Brand" />
         <Dropdown k="equipment_type" label="Type" />
@@ -150,9 +152,10 @@ export default function Drafts({ onOpen, initialFilter }) {
               <tr>
                 <th className="narrow"><input type="checkbox" aria-label="Select all models" checked={sel.size === items.length && items.length > 0} onChange={toggleAll} /></th>
                 <th className="narrow">Image</th>
+                <th className="click" onClick={() => sortBy("family")}>Family{sortArrow("family")}</th>
+                <th className="click" onClick={() => sortBy("category")}>Category{sortArrow("category")}</th>
                 <th className="click" onClick={() => sortBy("brand")}>Brand{sortArrow("brand")}</th>
                 <th className="click" onClick={() => sortBy("model_number")}>Model{sortArrow("model_number")}</th>
-                <th className="click" onClick={() => sortBy("category")}>Category{sortArrow("category")}</th>
                 <th>Type</th>
                 <th>Power</th>
                 <th className="click" onClick={() => sortBy("current_status")}>Status{sortArrow("current_status")}</th>
@@ -168,9 +171,10 @@ export default function Drafts({ onOpen, initialFilter }) {
                       ? <img className="row-thumb" src={it.image_url} alt="" loading="lazy" onError={(e) => { e.currentTarget.style.visibility = "hidden"; }} />
                       : <span className="row-thumb ph" aria-hidden>IMG</span>}
                   </td>
+                  <td>{it.family || "—"}</td>
+                  <td>{it.category || "—"}</td>
                   <td>{it.brand || "—"}</td>
                   <td><button className="model-link" onClick={() => onOpen(it.id)}>{it.model_number || it.title}</button></td>
-                  <td>{it.category || "—"}</td>
                   <td>{it.equipment_type || "—"}</td>
                   <td>{it.power_type ? <span className={"power " + it.power_type.toLowerCase()}>{it.power_type}</span> : "—"}</td>
                   <td><span className={"badge " + it.current_status}>{STATUS_LABEL[it.current_status] || it.current_status}</span></td>

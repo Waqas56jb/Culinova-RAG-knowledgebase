@@ -141,10 +141,11 @@ export default function Dashboard({ onOpen }) {
         ))}
       </div>
 
+      <p className="dash-eyebrow" style={{ margin: "6px 2px 0" }}>Equipment Family → Category → Model</p>
       <div className="breakdowns">
+        <Breakdown title="Family" data={s.byFamily} field="family" onOpen={onOpen} icon="🗂️" />
         <Breakdown title="Category" data={s.byCategory} field="category" onOpen={onOpen} icon="📦" />
         <Breakdown title="Brand" data={s.byBrand} field="brand" onOpen={onOpen} icon="🏷️" />
-        <Breakdown title="Power type" data={s.byPowerType} field="power_type" onOpen={onOpen} icon="⚡" />
       </div>
     </div>
   );
