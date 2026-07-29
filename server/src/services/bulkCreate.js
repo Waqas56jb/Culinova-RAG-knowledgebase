@@ -85,11 +85,12 @@ async function bulkCreateProducts(products, { origin = "excel", sourceDocument =
   }
   for (const m of await insertMany("ceks_models", newModels, "models")) modelMap.set(modelKey(m.brand_id, m.model_number), m);
 
-  // set images on models that already existed (re-import) too — cheap, images are rare
+  // fill an image ONLY where a model has none yet — never OVERWRITE an image a model already carries,
+  // so a client-provided series image (mapped by code) always wins over an unreliable embedded picture.
   for (const p of usable) {
     if (!p.image_url) continue;
     const m = modelMap.get(modelKey(brandFor(p).id, p.id.code || p.id.name));
-    if (m && m.image_url !== p.image_url) {
+    if (m && !m.image_url) {
       const { error } = await supabase.from("ceks_models").update({ image_url: p.image_url }).eq("id", m.id);
       if (error) out.errors.push({ error: `image update: ${error.message}` });
     }
