@@ -81,10 +81,12 @@ function useCountUp(target, duration = 700) {
 
 export default function Dashboard({ onOpen }) {
   const [s, setS] = useState(null);
+  const [taxo, setTaxo] = useState(null);   // the Family → Category master (12 families / 194 categories)
   const [error, setError] = useState("");
 
   useEffect(() => {
     api.adminStats().then(setS).catch((e) => setError(e.message));
+    api.adminTaxonomy().then(setTaxo).catch(() => {});
   }, []);
 
   if (error) return <div className="panel"><div className="alert">{error}</div></div>;
@@ -105,6 +107,9 @@ export default function Dashboard({ onOpen }) {
   const st = s.byStatus || {};
   const approved = st.approved || 0;
   const total = s.total || 1;
+  // structure counts come from the taxonomy (the master), NOT from how many models exist
+  const familyCount = taxo ? taxo.families.length : null;
+  const categoryCount = taxo ? Object.values(taxo.categoriesByFamily || {}).reduce((n, a) => n + a.length, 0) : null;
   const cards = [
     { label: "Total models", value: s.total, cls: "navy", filter: { status: "all" } },
     { label: "Draft", value: st.draft || 0, cls: "grey", filter: { status: "draft" } },
@@ -120,7 +125,7 @@ export default function Dashboard({ onOpen }) {
           <p className="dash-eyebrow">Overview</p>
           <h1 className="dash-title">Engineering knowledge</h1>
           <p className="dash-sub">
-            {s.total} equipment models · {approved} published · click any card to explore
+            {familyCount ?? "…"} families · {categoryCount ?? "…"} categories · {s.total} models · {approved} published
           </p>
         </div>
         <div className="dash-badge">
@@ -141,9 +146,14 @@ export default function Dashboard({ onOpen }) {
         ))}
       </div>
 
-      <p className="dash-eyebrow" style={{ margin: "6px 2px 0" }}>Equipment Family → Category → Model</p>
+      <p className="dash-eyebrow" style={{ margin: "18px 2px 0" }}>Equipment Family → Category → Model</p>
+      <div style={{ display: "flex", gap: 12, flexWrap: "wrap", margin: "8px 0 8px" }}>
+        <StructCard icon="🗂️" num={familyCount} label="Equipment Families" />
+        <StructCard icon="📦" num={categoryCount} label="Equipment Categories" />
+        <StructCard icon="⚙️" num={s.total} label="Equipment Models" />
+      </div>
       <div className="breakdowns">
-        <Breakdown title="Family" data={s.byFamily} field="family" onOpen={onOpen} icon="🗂️" />
+        <FamilyBreakdown families={taxo?.families} categoriesByFamily={taxo?.categoriesByFamily || {}} byFamily={s.byFamily} onOpen={onOpen} />
         <Breakdown title="Category" data={s.byCategory} field="category" onOpen={onOpen} icon="📦" />
         <Breakdown title="Brand" data={s.byBrand} field="brand" onOpen={onOpen} icon="🏷️" />
       </div>
@@ -182,6 +192,59 @@ function KpiCard({ label, value, cls, meta, total, onClick }) {
         </svg>
       </div>
     </button>
+  );
+}
+
+// Structure counts (from the taxonomy master) — these answer "how many families / categories exist",
+// which is NOT the same as "how many models" (that's the KPI cards / breakdowns).
+function StructCard({ icon, num, label }) {
+  return (
+    <div style={{ flex: "1 1 170px", background: "rgba(99,102,241,0.06)", border: "1px solid rgba(99,102,241,0.20)", borderRadius: 14, padding: "14px 18px", display: "flex", alignItems: "center", gap: 12 }}>
+      <span style={{ fontSize: 24, lineHeight: 1 }}>{icon}</span>
+      <div>
+        <div style={{ fontSize: 26, fontWeight: 800, lineHeight: 1, color: "#4f46e5" }}>{num ?? "—"}</div>
+        <div style={{ fontSize: 12, opacity: 0.75, marginTop: 4 }}>{label}</div>
+      </div>
+    </div>
+  );
+}
+
+// The Family breakdown lists ALL 12 families from the master (not just the ones that happen to have
+// models yet), each with its category count and its model count — so the full structure is always visible.
+function FamilyBreakdown({ families, categoriesByFamily, byFamily, onOpen }) {
+  const rows = (families || []).map((fam) => ({
+    fam,
+    cats: (categoriesByFamily[fam] || []).length,
+    models: (byFamily || {})[fam] || 0,
+  })).sort((a, b) => b.cats - a.cats || a.fam.localeCompare(b.fam));
+  const max = Math.max(1, ...rows.map((r) => r.cats));
+
+  return (
+    <section className="breakdown-card">
+      <div className="breakdown-head">
+        <h2><span className="breakdown-icon">🗂️</span> Family</h2>
+        <span className="breakdown-total">{rows.length}</span>
+      </div>
+      <div className="breakdown-list">
+        {rows.length === 0 && <p className="muted">Loading families…</p>}
+        {rows.map((r, i) => (
+          <button
+            key={r.fam}
+            type="button"
+            className="bar-row clickable"
+            style={{ "--bar-color": BAR_COLORS[i % BAR_COLORS.length] }}
+            onClick={() => onOpen({ status: "all", family: r.fam })}
+            title={`${r.fam}: ${r.cats} categories · ${r.models} models`}
+          >
+            <span className="bar-label" title={r.fam}>{r.fam}</span>
+            <div className="bar-track">
+              <div className="bar-fill" style={{ width: `${(r.cats / max) * 100}%`, animationDelay: `${i * 40}ms` }} />
+            </div>
+            <span className="bar-value">{r.cats} cat · {r.models} mdl</span>
+          </button>
+        ))}
+      </div>
+    </section>
   );
 }
 
