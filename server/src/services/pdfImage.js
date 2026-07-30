@@ -37,35 +37,64 @@ function toPngBuffer(img) {
   return PNG.sync.write(png);
 }
 
+// PHOTO-LIKENESS (0..1). A product PHOTO is a continuous-tone image with many distinct tones/colours; a
+// dimension DRAWING, a logo or scanned text is 1-bit or near-monochrome with only a handful. Sampling the
+// already-decoded pixels lets a real photo beat a LARGER line-art diagram on the same page — the exact
+// failure where a big dimension drawing was chosen instead of the product shot.
+function photoScore(img) {
+  const { kind, data, width, height } = img;
+  if (kind === 1) return 0.1;                          // 1-bit = line art / scanned text — not a photo
+  const bpp = kind === 3 ? 4 : 3;                      // RGBA / RGB
+  const step = Math.max(1, Math.floor((width * height) / 4000)) * bpp; // ~4000 samples, cheap
+  const hist = new Array(32).fill(0);                  // luminance histogram (works for colour AND grayscale)
+  let chroma = 0, n = 0;
+  for (let o = 0; o + 2 < data.length; o += step) {
+    const r = data[o], g = data[o + 1], b = data[o + 2];
+    const lum = (r * 299 + g * 587 + b * 114) / 1000;  // 0..255
+    hist[Math.min(31, lum >> 3)]++;                    // 32 tone buckets
+    chroma += Math.abs(r - g) + Math.abs(g - b) + Math.abs(r - b);
+    n++;
+  }
+  if (!n) return 0.3;
+  // A PHOTO fills many tone buckets with real population (smooth gradients); a line DIAGRAM is just
+  // white + black (2 dominant buckets). Count buckets holding >0.5% of the pixels — robust for grayscale
+  // product shots (which a naive colour-count wrongly scored as flat).
+  const populated = hist.filter((c) => c > n * 0.005).length;
+  const tones = Math.min(1, populated / 12);           // photo: 12+ tones; a line diagram: 2-3
+  const colourfulness = Math.min(1, (chroma / (n * 3 * 255)) * 4);
+  return Math.max(tones, colourfulness);
+}
+
 /**
  * Extract embedded raster images from a PDF and return the "best" product image
  * as a PNG buffer (largest area, above a minimum size, from the earliest pages).
  * Returns { buffer, width, height } or null.
  */
-// maxPages defaults to 1: the product photo is on page 1 of a datasheet, and decoding the many
-// technical diagrams on later pages added 15 s+ per page for no benefit. Page 1's own header logo is
-// rejected by the aspect-ratio filter, so the real photo still wins.
-async function extractMainImage(pdfBuffer, { maxPages = 1, minDim = 110 } = {}) {
+// maxPages defaults to 2: the product photo sits on page 1–2 of a datasheet. Later pages are skipped —
+// decoding their many technical diagrams added 15 s+ per page for no benefit. The score divides by the
+// page number, so a page-1 photo is strongly preferred, but a genuine photo on page 2 can still beat a
+// page-1 logo/diagram. Photo-likeness (below) is what stops a big line-art drawing from being chosen.
+async function extractMainImage(pdfBuffer, { maxPages = 2, minDim = 110 } = {}) {
   const pdfjs = getPdfjs();
   const OPS = pdfjs.OPS;
   const doc = await pdfjs.getDocument({ data: new Uint8Array(pdfBuffer), disableFontFace: true, isEvalSupported: false }).promise;
   const pages = Math.min(doc.numPages, maxPages);
   let best = null; // { img, w, h, score } — the RAW image; PNG-encoded only ONCE, at the very end
 
-  // Weigh a candidate raster: keep the largest, roughly-photo-shaped image on the earliest page.
-  // Extreme aspect ratios are banners / rules / dividers, not a product photo, so they are skipped —
-  // this is what stops a full-width header logo from being chosen as the product image.
+  // Weigh a candidate raster: the largest, roughly-square, PHOTO-like image on the earliest page.
+  // Extreme aspect ratios (banners/rules) and tiny images (logos/icons) are skipped outright.
   const consider = (img, p) => {
     if (!img || !img.width || !img.height || !img.data) return;
     const w = img.width, h = img.height;
     if (w < minDim || h < minDim) return;            // logos / icons
-    if (w > 5000 || h > 5000) return;                // huge scans → the page-render fallback covers these
+    if (w > 6000 || h > 6000) return;                // huge scans → the page-render fallback covers these
     const ar = w / h;
     if (ar > 3.5 || ar < 1 / 3.5) return;            // banner / rule, not a product shot
     const shape = 1 - Math.min(0.6, Math.abs(Math.log(ar)) * 0.35); // prefer square-ish over stretched
-    const score = (w * h * shape) / p;               // bigger + squarer + earlier page = better
-    // Only TRACK the winner here — encoding every transient "best" to PNG re-serialised megapixel
-    // bitmaps over and over and made image extraction take 40 s+ on image-heavy datasheets.
+    const photo = photoScore(img);                    // real photo beats a line-art diagram of similar size
+    const score = (w * h * shape * (0.3 + 0.7 * photo)) / p;
+    // Only TRACK the winner here — encoding every transient "best" to PNG re-serialised megapixel bitmaps
+    // over and over and made image extraction take 40 s+ on image-heavy datasheets.
     if (!best || score > best.score) best = { img, w, h, score };
   };
 
@@ -166,4 +195,4 @@ async function renderPages(pdfBuffer, { maxPages = 12, scale = 2.5, maxDim = 300
   return out;
 }
 
-module.exports = { extractMainImage, renderPages };
+module.exports = { extractMainImage, renderPages, photoScore };
