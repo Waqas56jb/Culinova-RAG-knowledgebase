@@ -46,11 +46,13 @@ export default function Upload({ onDone }) {
       <div className="mode-tabs">
         <button className={mode === "folder" ? "mtab active" : "mtab"} onClick={() => setMode("folder")}>Folder / PDF (auto-organize)</button>
         <button className={mode === "excel" ? "mtab active" : "mtab"} onClick={() => setMode("excel")}>Excel Bulk Import</button>
+        <button className={mode === "datasheets" ? "mtab active" : "mtab"} onClick={() => setMode("datasheets")}>Bulk Datasheets</button>
         <button className={mode === "files" ? "mtab active" : "mtab"} onClick={() => setMode("files")}>Single PDF(s)</button>
         <button className={mode === "manual" ? "mtab active" : "mtab"} onClick={() => setMode("manual")}>Manual Entry</button>
       </div>
       {mode === "folder" && <FolderUpload onDone={onDone} />}
       {mode === "excel" && <BatchImport />}
+      {mode === "datasheets" && <DatasheetUpload />}
       {mode === "files" && <SingleUpload onDone={onDone} />}
       {mode === "manual" && <ManualUpload onDone={onDone} />}
     </PagePanel>
@@ -361,6 +363,109 @@ function SingleUpload({ onDone }) {
       <div className="actions">
         {!running && <Btn className="primary" loading={busy} disabled={!files.length} onClick={submit}>Extract &amp; create Drafts</Btn>}
         {running && !busy && <Btn onClick={() => { setQueue(null); setFiles([]); setTypes([]); }}>Upload more</Btn>}
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- Bulk Datasheets — attach PDFs to existing products by code (Step 2) ---------------- */
+function DatasheetUpload() {
+  const [files, setFiles] = useState([]);
+  const [preview, setPreview] = useState(null);
+  const [report, setReport] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [drag, setDrag] = useState(false);
+  const [progress, setProgress] = useState("");
+
+  function take(list) { setFiles(list); setPreview(null); setReport(null); setError(""); }
+
+  async function checkMatches() {
+    if (!files.length) return;
+    setBusy(true); setError(""); setReport(null);
+    try { setPreview(await api.datasheetPreview(files.map((f) => f.name))); }
+    catch (e) { setError(e.message); } finally { setBusy(false); }
+  }
+
+  async function uploadAndAttach() {
+    if (!files.length) return;
+    setBusy(true); setError(""); setReport(null);
+    try {
+      const uploaded = [];
+      for (let i = 0; i < files.length; i++) {
+        const f = files[i];
+        setProgress(`Uploading ${i + 1}/${files.length} — ${f.name}`);
+        const { storage_path, signed_url } = await api.getPdfUploadUrl(f.name);
+        await api.putToSignedUrl(signed_url, f);
+        uploaded.push({ filename: f.name, storage_path });
+      }
+      setProgress("Matching & attaching…");
+      setReport(await api.datasheetAttach(uploaded));
+    } catch (e) { setError(e.message); } finally { setBusy(false); setProgress(""); }
+  }
+
+  const prodCodes = (arr) => arr.slice(0, 4).map((p) => p.code).join(", ") + (arr.length > 4 ? ` +${arr.length - 4} more` : "");
+
+  return (
+    <div>
+      <p className="muted">
+        Upload datasheets in bulk — EOS attaches each PDF to the existing product by the <b>code in its file name</b>.
+        <b> TBS.100.pdf</b> → that one product; <b> TBS.pdf</b> → the whole TBS series (one shared datasheet, many products, in one action).
+        A file whose code matches no product is reported and <b>never</b> attached to the wrong item.
+      </p>
+
+      {!report && (
+        <label className={"dropzone" + (drag ? " drag" : "")}
+          onDragOver={(e) => { e.preventDefault(); setDrag(true); }} onDragLeave={() => setDrag(false)}
+          onDrop={(e) => { e.preventDefault(); setDrag(false); take(Array.from(e.dataTransfer.files || []).filter((f) => f.name.toLowerCase().endsWith(".pdf"))); }}>
+          <input type="file" accept="application/pdf" multiple hidden onChange={(e) => take(Array.from(e.target.files || []))} />
+          <div><strong>Drag &amp; drop datasheet PDFs, or click to choose</strong>
+            <div className="muted">Name each by its product code (TBS.100.pdf) or series (TBS.pdf).</div></div>
+        </label>
+      )}
+      {files.length > 0 && !report && <p className="muted">{files.length} PDF(s) selected.</p>}
+      {error && <div className="alert">{error}</div>}
+      {busy && progress && <p className="muted">{progress}</p>}
+
+      {preview && !report && (
+        <div className="results">
+          <h2>Match preview</h2>
+          <div className="scroll-x"><table className="grid">
+            <thead><tr><th>File</th><th>Match</th><th>Products</th></tr></thead>
+            <tbody>
+              {preview.matched.map((m, i) => (
+                <tr key={i}><td>{m.filename}</td><td><span className="badge approved">{m.count} · {m.how}</span></td><td className="muted">{prodCodes(m.products)}</td></tr>
+              ))}
+              {preview.unmatched.map((u, i) => (
+                <tr key={"u" + i} className="std-pending"><td>{u.filename}</td><td><span className="badge pending">unmatched</span></td><td className="muted">no product with this code</td></tr>
+              ))}
+            </tbody>
+          </table></div>
+          <p className="muted">{preview.matched.reduce((n, m) => n + m.count, 0)} product link(s) from {preview.matched.length} matched file(s) · {preview.unmatched.length} unmatched.</p>
+        </div>
+      )}
+
+      {report && (
+        <div className="results">
+          <div className="notice">✓ Attached — {report.links} datasheet link(s) across {report.attached.length} file(s){report.unmatched.length ? ` · ${report.unmatched.length} unmatched` : ""}.</div>
+          <div className="scroll-x"><table className="grid">
+            <thead><tr><th>File</th><th>Attached to</th></tr></thead>
+            <tbody>
+              {report.attached.map((a, i) => (
+                <tr key={i}><td>{a.filename}</td><td className="muted">{a.count} product(s) [{a.how}] — {prodCodes(a.products)}</td></tr>
+              ))}
+              {report.unmatched.map((u, i) => (
+                <tr key={"u" + i} className="std-pending"><td>{u.filename}</td><td className="muted">unmatched — {u.error || "no product with this code"}</td></tr>
+              ))}
+            </tbody>
+          </table></div>
+        </div>
+      )}
+
+      <div className="actions">
+        {!preview && !report && <Btn onClick={checkMatches} loading={busy} disabled={!files.length}>Check matches</Btn>}
+        {preview && !report && <><Btn className="primary" onClick={uploadAndAttach} loading={busy}>Upload &amp; attach {files.length} datasheet(s)</Btn><Btn onClick={() => take([])} disabled={busy}>Clear</Btn></>}
+        {report && <Btn onClick={() => take([])}>Upload more</Btn>}
       </div>
     </div>
   );

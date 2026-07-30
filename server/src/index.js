@@ -23,6 +23,7 @@ const projectRoutes = require("./routes/projects");
 const drawingRoutes = require("./routes/drawings");
 const erpIntegrationRoutes = require("./routes/erpIntegration");
 const engineeringRequestRoutes = require("./routes/engineeringRequests");
+const datasheetRoutes = require("./routes/datasheets");
 
 assertConfig();
 
@@ -119,6 +120,7 @@ app.use("/api/drawings", drawingRoutes);
 // ── knowledge management (guarded per-route) ─────────────────────────────────
 app.use("/api/ingest", writeLimiter, ingestRoutes);
 app.use("/api/import-jobs", writeLimiter, importJobRoutes);
+app.use("/api/datasheets", writeLimiter, datasheetRoutes); // Step 2: bulk datasheet → product by code
 app.use("/api/admin", adminRoutes); // search/filter/sort/bulk/stats
 app.use("/api", aiLimiter, assistantRoutes); // /api/entries/:id/ask, /summary, /engineering-notes (OpenAI cost)
 app.use("/api", reviewRoutes); // /api/drafts, /api/entries/:id, /api/attributes/:id ...

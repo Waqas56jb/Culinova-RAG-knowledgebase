@@ -122,6 +122,9 @@ export const api = {
     if (!res.ok) { let m = `HTTP ${res.status}`; try { m = (await res.text()) || m; } catch {} throw new Error(`Upload to storage failed (${m})`); }
   },
   extractPdfFromStorage: (storage_path, file_name, doc_type) => jf(`/api/ingest/pdf-from-storage`, { storage_path, file_name, doc_type }),
+  // Step 2 — bulk datasheets matched to existing products by code
+  datasheetPreview: (filenames) => jf(`/api/datasheets/preview`, { filenames }),
+  datasheetAttach: (files) => jf(`/api/datasheets/attach`, { files }),
   uploadFolder: (list) => {
     const fd = new FormData();
     const paths = [];
