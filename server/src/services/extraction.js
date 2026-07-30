@@ -86,6 +86,13 @@ const SYSTEM_PROMPT =
   "- Use clean, human-readable field names in Title Case. Put the numeric value in `value` and unit in `unit`.\n" +
   "- Identify the equipment IDENTITY: brand, category, equipment_type, series/line, model_number, power_type " +
   "(Electric, Gas, or Neutral).\n" +
+  "- BRAND is the MANUFACTURER / maker of the equipment (e.g. FAGOR, MBM, UNOX, NOVA COOL, BARTSCHER, " +
+  "RATIONAL, HOSHIZAKI). It is one of the MOST IMPORTANT fields. It usually appears as a company LOGO or " +
+  "name in the page header, footer, title block or watermark, in the document metadata, on the web/contact " +
+  "line (e.g. www.fagor.com → FAGOR), or as a prefix inside the model number. Work it out and report it. " +
+  "Report the manufacturer, NOT the product line or series (the line goes in `series`, e.g. brand MBM / " +
+  "series Magistra). Only set brand to null if NO manufacturer name, logo, website or code is present " +
+  "ANYWHERE on the sheet — never leave it null when the maker is identifiable.\n" +
   "\nAssign each attribute to the correct engineering SECTION (attr_group). Extract EVERY relevant value present, " +
   "including connection TYPE, DIAMETER/SIZE, and HEIGHT FROM FINISHED FLOOR wherever the datasheet gives them:\n" +
   "- technical_specification: capacity, output, performance, materials, operating temperature, general specs.\n" +
@@ -184,7 +191,10 @@ async function extractImageBatch(pageImages, pageOffset, docLabel, sourceFileNam
         `number and specifications are printed in headers, title blocks and callouts. Extract every ` +
         `value you can actually see, following the schema. Set source_page to the page number labelled ` +
         `before each image. ${fileHint}` +
-        `The model_number is usually the most prominent code near the product name or in the header.`,
+        `The model_number is usually the most prominent code near the product name or in the header. ` +
+        `The BRAND / manufacturer is usually a company LOGO or name at the very TOP or BOTTOM of the page ` +
+        `(and often a website like www.fagor.com). READ THE LOGO and report the manufacturer as brand — ` +
+        `never leave brand null if any manufacturer logo, name or website is visible.`,
     },
   ];
   // Label each image with its real page number so source_page is authoritative (vision cannot otherwise
@@ -255,9 +265,16 @@ async function extractFromPdf(pdfBuffer, docLabel, sourceFileName = "") {
     // Gray zone: barely over the text threshold with implausibly few attributes for the page count.
     const thinExtraction = textLen < 1500 && (fromText?.attributes?.length || 0) < Math.max(4, pageCount * 3);
 
-    // Trust the fast path only for a RICH sheet with a plausible printed model. A thin sheet, an
-    // implausible model, or a hybrid (image spec-pages) all get a second look with vision.
-    if (modelPlausible && !looksHybrid && !thinExtraction) return fromText;
+    // The BRAND is very often only a LOGO in the header/footer — an image the text pass literally cannot
+    // read — so the fast path returns a perfectly good datasheet with brand "Unknown". Treat a missing
+    // brand exactly like a missing model: send the sheet to VISION so the logo is read. (Vision only
+    // FILLS the brand gap here — the plausible text model_number is kept, see distrustTextIdentity.)
+    const brandText = String(fromText?.model?.brand || "").trim();
+    const brandFound = brandText && !/^(unknown|n\/?a|manufacturer|brand|not\s+specified|none|tbd|-+)$/i.test(brandText);
+
+    // Trust the fast path only for a RICH sheet with a plausible printed model AND a real brand. A thin
+    // sheet, an implausible model, a missing brand, or a hybrid (image spec-pages) all get vision.
+    if (modelPlausible && brandFound && !looksHybrid && !thinExtraction) return fromText;
     try {
       const images = await renderPages(pdfBuffer);
       const fromVision = await extractFromImages(images, docLabel, sourceFileName);
