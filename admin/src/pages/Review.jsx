@@ -651,8 +651,10 @@ function PowerPill({ value }) {
   return <span className={"power " + value.toLowerCase()}>{value}</span>;
 }
 
+// Category is NOT here — it is a dropdown restricted to the approved categories (see below), so an
+// engineer can only ever pick one of the approved 187, never type a new one.
 const EDIT_FIELDS = [
-  ["brand", "Brand"], ["category", "Category"], ["equipment_type", "Equipment Type"],
+  ["brand", "Brand"], ["equipment_type", "Equipment Type"],
   ["series", "Series / Line"], ["model_number", "Model"],
 ];
 
@@ -663,9 +665,11 @@ export function EquipmentProfile({ d, status, fileUrl, entryId, onSaved }) {
   const [form, setForm] = useState({});
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
+  const [taxo, setTaxo] = useState({ families: [], categoriesByFamily: {} }); // approved Family → Category list
+  useEffect(() => { api.adminTaxonomy().then(setTaxo).catch(() => {}); }, []);
 
   function startEdit() {
-    setForm({ brand: m.brand || "", category: m.category || "", equipment_type: m.equipment_type || "", series: m.series || "", model_number: m.model_number || "", power_type: m.power_type || "", description: d.entry.summary || "" });
+    setForm({ family: d.entry.family || "", brand: m.brand || "", category: m.category || "", equipment_type: m.equipment_type || "", series: m.series || "", model_number: m.model_number || "", power_type: m.power_type || "", description: d.entry.summary || "" });
     setErr(""); setEdit(true);
   }
   async function save() {
@@ -703,6 +707,20 @@ export function EquipmentProfile({ d, status, fileUrl, entryId, onSaved }) {
         {edit ? (
           <div className="identity-edit">
             <div className="identity">
+              <div className="ifield">
+                <span className="ilabel">Equipment Family</span>
+                <select value={form.family || ""} onChange={(e) => setForm((f) => ({ ...f, family: e.target.value, category: "" }))}>
+                  <option value="">— Select family —</option>
+                  {(taxo.families || []).map((fam) => <option key={fam} value={fam}>{fam}</option>)}
+                </select>
+              </div>
+              <div className="ifield">
+                <span className="ilabel">Equipment Category</span>
+                <select value={form.category || ""} disabled={!form.family} onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}>
+                  <option value="">{form.family ? "— Select category —" : "Select a family first"}</option>
+                  {(taxo.categoriesByFamily[form.family] || []).map((cat) => <option key={cat} value={cat}>{cat}</option>)}
+                </select>
+              </div>
               {EDIT_FIELDS.map(([k, label]) => (
                 <div key={k} className="ifield">
                   <span className="ilabel">{label}</span>

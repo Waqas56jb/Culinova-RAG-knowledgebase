@@ -14,7 +14,7 @@
  * and only the genuinely new ones are inserted.
  */
 const { supabase } = require("../config/supabase");
-const { findOrCreateCategory, findOrCreateType, findOrCreateBrand, familyForCategory, slug } = require("../utils/draft");
+const { findOrCreateCategory, findOrCreateType, findOrCreateBrand, familyForCategory, resolveApprovedCategory, slug } = require("../utils/draft");
 
 const clean = (v) => (v == null ? null : String(v).trim() || null);
 
@@ -36,28 +36,35 @@ async function bulkCreateProducts(products, { origin = "excel", sourceDocument =
   out.skipped = products.length - usable.length;
   if (!usable.length) return out;
 
-  // ── 1. taxonomy — one resolve per DISTINCT category/type/brand (cached inside draft.js) ────────
+  // ── 1. taxonomy ────────────────────────────────────────────────────────────────────────────────
   // Brand = the manufacturer: a dedicated Brand/Manufacturer column wins, else the legacy Source Type.
   const brandNameOf = (p) => p.id.brand || p.id.source || "CULINOVA";
+
+  // CATEGORY LOCK — resolve each product to one of the APPROVED categories (try its category, then its
+  // type). No confident match → null → the entry is flagged for review, NEVER given an invented category.
+  const approvedCache = new Map();
+  for (const p of usable) {
+    const k = `${p.id.category || ""}|${p.id.type || ""}`;
+    if (!approvedCache.has(k)) approvedCache.set(k, await resolveApprovedCategory([p.id.category, p.id.type]));
+  }
+  const approvedCatOf = (p) => approvedCache.get(`${p.id.category || ""}|${p.id.type || ""}`) || null;
+  const relCatOf = (p) => approvedCatOf(p) || "Unassigned"; // relational placeholder; never shown as the entry's category
+
+  // Family derived from the APPROVED category (an explicit family on the row wins).
+  const familyByApproved = new Map();
+  for (const p of usable) { const a = approvedCatOf(p); if (a && !familyByApproved.has(a)) familyByApproved.set(a, await familyForCategory(a)); }
+  const familyFor = (p) => p.id.family || (approvedCatOf(p) ? familyByApproved.get(approvedCatOf(p)) : null) || null;
+
   const brandOf = new Map(); // "cat|type|brand" → brand row
   for (const p of usable) {
-    const key = `${p.id.category || ""}|${p.id.type || ""}|${brandNameOf(p)}`;
+    const key = `${relCatOf(p)}|${p.id.type || ""}|${brandNameOf(p)}`;
     if (brandOf.has(key)) continue;
-    const category = await findOrCreateCategory(p.id.category);
+    const category = await findOrCreateCategory(relCatOf(p));
     const type = await findOrCreateType(category.id, p.id.type);
     const brand = await findOrCreateBrand(type.id, brandNameOf(p));
     brandOf.set(key, brand);
   }
-  const brandFor = (p) => brandOf.get(`${p.id.category || ""}|${p.id.type || ""}|${brandNameOf(p)}`);
-
-  // ── Family → Category → Model: derive Family for each distinct category from the master taxonomy
-  //    (an explicit family on the row wins). Resolved once per distinct category, not per row. ──────
-  const familyByCat = new Map();
-  for (const p of usable) {
-    const cat = p.id.category || "";
-    if (!familyByCat.has(cat)) familyByCat.set(cat, await familyForCategory(cat));
-  }
-  const familyFor = (p) => p.id.family || familyByCat.get(p.id.category || "") || null;
+  const brandFor = (p) => brandOf.get(`${relCatOf(p)}|${p.id.type || ""}|${brandNameOf(p)}`);
 
   // ── 2. models — reuse what exists, insert only the new ones ────────────────────────────────────
   const codes = [...new Set(usable.map((p) => p.id.code || p.id.name))];
@@ -123,7 +130,7 @@ async function bulkCreateProducts(products, { origin = "excel", sourceDocument =
       current_status: "draft",
       origin,
       family: familyFor(p),
-      category: p.id.category || null,
+      category: approvedCatOf(p), // null when unmatched → flagged for review; NEVER an invented category
       equipment_type: p.id.type || null,
       power_type: p.id.power || null,
       brand: b.name,
@@ -209,6 +216,8 @@ async function bulkCreateProducts(products, { origin = "excel", sourceDocument =
       });
     });
     if (clean(p.id.remarks)) noteRows.push({ version_id: v.id, content: clean(p.id.remarks), note_type: "engineering" });
+    // flag any product whose category is not one of the approved categories, so a human assigns it
+    if (!approvedCatOf(p)) noteRows.push({ version_id: v.id, note_type: "review", content: `Category needs review: "${String(p.id.category || p.id.type || "").trim() || "?"}" is not one of the approved categories — please assign the correct category.` });
     // a non-displayable photo folder/file reference is kept as a note (never a broken image)
     for (const n of p.notes || []) noteRows.push({ version_id: v.id, content: n.content, note_type: n.note_type || "engineering" });
     historyRows.push({

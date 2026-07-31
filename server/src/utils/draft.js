@@ -68,6 +68,30 @@ async function familyForCategory(categoryName) {
   return null;
 }
 
+/**
+ * CATEGORY LOCK — the approved category list (the taxonomy) is the ONLY source of valid categories.
+ * EOS never invents one. loadApprovedCategories() → Map(lowercased → canonical). resolveApprovedCategory
+ * tries each candidate in order (typically [category, equipment_type], since AI extraction often puts
+ * the real category in equipment_type) and returns the canonical approved name on an EXACT, confident
+ * match — otherwise null, so the item is flagged for a human to pick from the approved list.
+ */
+let _approvedCats = null;
+async function loadApprovedCategories() {
+  if (_approvedCats) return _approvedCats;
+  const { data } = await supabase.from("ceks_equipment_taxonomy").select("category");
+  _approvedCats = new Map();
+  for (const r of data || []) _approvedCats.set(String(r.category).trim().toLowerCase(), r.category);
+  return _approvedCats;
+}
+async function resolveApprovedCategory(candidates) {
+  const map = await loadApprovedCategories();
+  for (const c of Array.isArray(candidates) ? candidates : [candidates]) {
+    const k = String(c || "").trim().toLowerCase();
+    if (k && map.has(k)) return map.get(k);
+  }
+  return null;
+}
+
 async function findOrCreateCategory(name) {
   const clean = name || "Uncategorized";
   const key = clean.toLowerCase();
@@ -154,7 +178,10 @@ async function findOrCreateModel(brandId, modelIdentifier, extra = {}) {
  * @param {string} p.origin 'ai_pdf' | 'excel' | 'manual'
  */
 async function persistDraft({ model = {}, attributes = [], notes = [], origin = "ai_pdf" }) {
-  const category = await findOrCreateCategory(model.category);
+  // CATEGORY LOCK — resolve to one of the APPROVED categories (try the explicit category, then the
+  // equipment_type). No confident match → the item is FLAGGED for review, never given an invented category.
+  const approvedCat = await resolveApprovedCategory([model.category, model.equipment_type]);
+  const category = await findOrCreateCategory(approvedCat || "Unassigned");
   const type = await findOrCreateType(category.id, model.equipment_type);
   const brand = await findOrCreateBrand(type.id, model.brand);
   // Never fabricate a model number. resolveModelIdentifier only ever returns real data (the
@@ -187,17 +214,19 @@ async function persistDraft({ model = {}, attributes = [], notes = [], origin = 
   const brandKnown = brand.name && brand.name.toLowerCase() !== "unknown";
   const title = brandKnown ? `${brand.name} ${modelRow.model_number}` : (model.display_name || modelRow.model_number);
   const attrOrigin = origin === "ai_pdf" ? "ai_extracted" : origin === "excel" ? "excel" : "manual";
-  // Family → Category → Model: an explicit family wins, otherwise it is derived from the category.
-  const family = model.family || (await familyForCategory(category.name));
+  // Family → Category → Model: an explicit family wins, otherwise it is derived from the approved category.
+  const family = model.family || (approvedCat ? await familyForCategory(approvedCat) : null);
   // denormalized identity for fast admin search/filter/sort
   const identityFields = {
     family,
-    category: category.name,
+    category: approvedCat, // null when unmatched → shows as needs-review; NEVER an invented category
     brand: brand.name,
     equipment_type: type.name,
     power_type: model.power_type || null,
     model_number: modelRow.model_number,
   };
+  // flag any item whose category could not be matched to the approved list, so a human assigns it
+  if (!approvedCat) notes.push({ note_type: "review", content: `Category needs review: "${String(model.category || model.equipment_type || "").trim() || "?"}" is not one of the approved categories — please assign the correct category.` });
 
   // ---- DEDUP: one knowledge entry per model ----------------------------
   // If this model already has an entry, add a NEW VERSION for re-review
@@ -318,7 +347,8 @@ async function updateEntryIdentity(entryId, id) {
   if (!link) throw new Error("Model not found for this entry.");
   const modelId = link.scope_id;
 
-  const category = await findOrCreateCategory(id.category);
+  const approvedCat = await resolveApprovedCategory([id.category, id.equipment_type]);
+  const category = await findOrCreateCategory(approvedCat || "Unassigned");
   const type = await findOrCreateType(category.id, id.equipment_type);
   const brand = await findOrCreateBrand(type.id, id.brand);
 
@@ -336,7 +366,7 @@ async function updateEntryIdentity(entryId, id) {
 
   const brandKnown = brand.name && brand.name.toLowerCase() !== "unknown";
   const title = brandKnown ? `${brand.name} ${id.model_number}` : id.display_name || id.model_number;
-  const family = id.family || (await familyForCategory(category.name));
+  const family = id.family || (approvedCat ? await familyForCategory(approvedCat) : null);
   await supabase
     .from("ceks_knowledge_entries")
     .update({
@@ -344,7 +374,7 @@ async function updateEntryIdentity(entryId, id) {
       code: id.model_number,
       summary: id.description ?? null,
       family,
-      category: category.name,
+      category: approvedCat,
       brand: brand.name,
       equipment_type: type.name,
       power_type: id.power_type || null,
@@ -353,11 +383,12 @@ async function updateEntryIdentity(entryId, id) {
     })
     .eq("id", entryId);
 
-  return { title, family, category: category.name, brand: brand.name, equipment_type: type.name };
+  return { title, family, category: approvedCat, brand: brand.name, equipment_type: type.name };
 }
 
 module.exports = {
   persistDraft, updateEntryIdentity, slug,
   // exported so a bulk importer can resolve the same taxonomy without duplicating this logic
   findOrCreateCategory, findOrCreateType, findOrCreateBrand, familyForCategory,
+  resolveApprovedCategory, loadApprovedCategories,
 };
