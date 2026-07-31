@@ -75,21 +75,48 @@ async function familyForCategory(categoryName) {
  * the real category in equipment_type) and returns the canonical approved name on an EXACT, confident
  * match — otherwise null, so the item is flagged for a human to pick from the approved list.
  */
+// Case / punctuation / spacing-insensitive key so "Reach-In Refrigerator", "Reach In Refrigerator"
+// and "reach in refrigerator" all collide onto the same approved category.
+const catKey = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+
 let _approvedCats = null;
 async function loadApprovedCategories() {
   if (_approvedCats) return _approvedCats;
   const { data } = await supabase.from("ceks_equipment_taxonomy").select("category");
   _approvedCats = new Map();
-  for (const r of data || []) _approvedCats.set(String(r.category).trim().toLowerCase(), r.category);
+  for (const r of data || []) _approvedCats.set(catKey(r.category), r.category);
   return _approvedCats;
 }
-async function resolveApprovedCategory(candidates) {
-  const map = await loadApprovedCategories();
-  for (const c of Array.isArray(candidates) ? candidates : [candidates]) {
-    const k = String(c || "").trim().toLowerCase();
-    if (k && map.has(k)) return map.get(k);
+
+// SYNONYM DICTIONARY — common product names -> an approved category, consulted BEFORE flagging for
+// review so standard products ("Upright Refrigerator", "Stand Mixer", "Pastry Sheeter") resolve
+// instead of piling up in the review queue. Each alias is re-validated against the approved list at
+// load time, so a synonym can NEVER introduce a category outside the 187 — the guarantee holds even
+// for rows the client adds later, not just the seeded ones. Data-driven: extend by inserting rows.
+let _catAliases = null;
+async function loadCategoryAliases() {
+  if (_catAliases) return _catAliases;
+  const approved = await loadApprovedCategories();
+  _catAliases = new Map();
+  try {
+    const { data } = await supabase.from("ceks_category_aliases").select("alias, category");
+    for (const r of data || []) {
+      const target = approved.get(catKey(r.category)); // canonical approved name, or undefined
+      if (r.alias && target) _catAliases.set(catKey(r.alias), target); // drop non-approved targets
+    }
+  } catch {
+    /* table may not exist yet — exact matching still works */
   }
-  return null;
+  return _catAliases;
+}
+
+async function resolveApprovedCategory(candidates) {
+  const list = (Array.isArray(candidates) ? candidates : [candidates]).map(catKey).filter(Boolean);
+  const map = await loadApprovedCategories();
+  for (const k of list) if (map.has(k)) return map.get(k); // 1) an exact approved match always wins
+  const aliases = await loadCategoryAliases();
+  for (const k of list) if (aliases.has(k)) return aliases.get(k); // 2) then a known synonym
+  return null; // 3) otherwise flag for a human to pick from the approved list
 }
 
 async function findOrCreateCategory(name) {
@@ -390,5 +417,5 @@ module.exports = {
   persistDraft, updateEntryIdentity, slug,
   // exported so a bulk importer can resolve the same taxonomy without duplicating this logic
   findOrCreateCategory, findOrCreateType, findOrCreateBrand, familyForCategory,
-  resolveApprovedCategory, loadApprovedCategories,
+  resolveApprovedCategory, loadApprovedCategories, loadCategoryAliases,
 };
