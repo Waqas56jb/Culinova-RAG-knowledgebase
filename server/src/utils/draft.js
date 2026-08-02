@@ -116,7 +116,13 @@ async function resolveApprovedCategory(candidates) {
   for (const k of list) if (map.has(k)) return map.get(k); // 1) an exact approved match always wins
   const aliases = await loadCategoryAliases();
   for (const k of list) if (aliases.has(k)) return aliases.get(k); // 2) then a known synonym
-  return null; // 3) otherwise flag for a human to pick from the approved list
+  // 3) phrase match: the longest approved category / synonym PHRASE (multi-word, >=10 chars) that
+  //    appears as whole words inside a candidate — handles verbose datasheet names like
+  //    "Three Door Refrigerated Counter with Back Splash". The multi-word + length guard avoids the
+  //    false positives a bare single-word substring ("rack", "oven", "sink") would cause.
+  const phrases = [...map.entries(), ...aliases.entries()].filter(([k]) => k.includes(" ") && k.length >= 10).sort((a, b) => b[0].length - a[0].length);
+  for (const k of list) { const padded = ` ${k} `; for (const [p, canon] of phrases) if (padded.includes(` ${p} `)) return canon; }
+  return null; // 4) otherwise flag for a human to pick from the approved list
 }
 
 // BRAND -> Family/Category rules (client-extensible ceks_brand_class_rules). A brand pins the Family
@@ -149,9 +155,9 @@ async function brandRuleFor(brand) {
 // then synonym/exact category resolution; and for family: an explicit family, then the brand's family,
 // then the family derived from the resolved category. Returns nulls when it genuinely cannot classify
 // (caller then flags the item for review — never saves it as a valid product with empty fields).
-async function classifyFamilyCategory({ category, equipment_type, brand, family } = {}) {
+async function classifyFamilyCategory({ category, equipment_type, brand, family, description } = {}) {
   const rule = await brandRuleFor(brand);
-  const approvedCat = await resolveApprovedCategory([category, equipment_type]);
+  const approvedCat = await resolveApprovedCategory([category, equipment_type, description]);
   const finalCategory = (rule && rule.category) ? rule.category : approvedCat;
   const finalFamily = family || (rule && rule.family) || (finalCategory ? await familyForCategory(finalCategory) : null);
   return { family: finalFamily || null, category: finalCategory || null };
@@ -246,7 +252,7 @@ async function persistDraft({ model = {}, attributes = [], notes = [], origin = 
   // CATEGORY LOCK + BRAND CLASSIFICATION — resolve to an APPROVED family+category (brand fixed category,
   // then synonym/exact; family from brand rule or derived). No confident match → FLAGGED for review,
   // never given an invented category. Family + Category are mandatory for a valid product.
-  const cls = await classifyFamilyCategory({ category: model.category, equipment_type: model.equipment_type, brand: model.brand, family: model.family });
+  const cls = await classifyFamilyCategory({ category: model.category, equipment_type: model.equipment_type, brand: model.brand, family: model.family, description: model.description });
   const approvedCat = cls.category;
   const category = await findOrCreateCategory(approvedCat || "Unassigned");
   const type = await findOrCreateType(category.id, model.equipment_type);
