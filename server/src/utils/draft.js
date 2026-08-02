@@ -79,6 +79,36 @@ async function familyForCategory(categoryName) {
 // and "reach in refrigerator" all collide onto the same approved category.
 const catKey = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 
+// Generic words that don't identify a piece of equipment — ignored when picking a type's keyword,
+// so learning generalises on the DISTINCTIVE word ("steriliz"), not on "cabinet"/"machine"/"unit".
+const GENERIC_WORDS = new Set("machine system unit cabinet equipment counter table device appliance professional industrial commercial electric gas stainless steel with and the for top door single double triple three two four five six eight heavy duty preparation prep station mobile wall floor free standing type food kitchen".split(" "));
+// crude stemmer so "sterilizer" and "sterilizing" both reduce to "steriliz"
+function stemToken(w) {
+  let s = String(w || "").toLowerCase();
+  for (const suf of ["ations", "ation", "ings", "ing", "ers", "ors", "er", "or", "ion", "es", "s", "e"]) { if (s.length > 4 && s.endsWith(suf)) { s = s.slice(0, -suf.length); break; } }
+  return s;
+}
+// the single most distinctive word of a type, stemmed — the key a LEARNED rule generalises on.
+function keywordOf(text) {
+  const toks = catKey(text).split(" ").filter((t) => t.length >= 5 && !GENERIC_WORDS.has(t));
+  if (!toks.length) return null;
+  toks.sort((a, b) => b.length - a.length);
+  const stem = stemToken(toks[0]);
+  return stem.length >= 4 ? stem : null;
+}
+// keyword rules the reviewer taught us (distinctive stem -> approved category). Re-validated on load.
+let _keywordRules = null;
+async function loadKeywordRules() {
+  if (_keywordRules) return _keywordRules;
+  _keywordRules = new Map();
+  try {
+    const approved = await loadApprovedCategories();
+    const { data } = await supabase.from("ceks_category_keyword_rules").select("keyword, category");
+    for (const r of data || []) { const c = approved.get(catKey(r.category)); if (r.keyword && c) _keywordRules.set(r.keyword, c); }
+  } catch { /* table may not exist yet */ }
+  return _keywordRules;
+}
+
 let _approvedCats = null;
 async function loadApprovedCategories() {
   if (_approvedCats) return _approvedCats;
@@ -122,7 +152,11 @@ async function resolveApprovedCategory(candidates) {
   //    false positives a bare single-word substring ("rack", "oven", "sink") would cause.
   const phrases = [...map.entries(), ...aliases.entries()].filter(([k]) => k.includes(" ") && k.length >= 10).sort((a, b) => b[0].length - a[0].length);
   for (const k of list) { const padded = ` ${k} `; for (const [p, canon] of phrases) if (padded.includes(` ${p} `)) return canon; }
-  return null; // 4) otherwise flag for a human to pick from the approved list
+  // 4) LEARNED keyword rule: the distinctive stem of the type matches something the reviewer taught us
+  //    (so "Sterilizing Cabinet" classifies after "Knife Sterilizer" was classified once — same "steriliz")
+  const kwRules = await loadKeywordRules();
+  if (kwRules.size) for (const k of list) { const kw = keywordOf(k); if (kw && kwRules.has(kw)) return kwRules.get(kw); }
+  return null; // 5) otherwise flag for a human to pick from the approved list
 }
 
 // BRAND -> Family/Category rules (client-extensible ceks_brand_class_rules). A brand pins the Family
@@ -166,7 +200,15 @@ async function learnCategoryAlias(equipmentType, approvedCategory) {
   } else {
     await supabase.from("ceks_category_aliases").insert({ alias, category: approvedCategory, note: "learned from manual classification" });
   }
-  _catAliases = null; // drop the cache so the learned rule applies to the very next classification
+  _catAliases = null; // drop the cache so the exact rule applies to the very next classification
+  // ALSO learn a KEYWORD rule so SIMILAR types (different wording, same concept) classify automatically
+  const kw = keywordOf(alias);
+  if (kw) {
+    const { data: kex } = await supabase.from("ceks_category_keyword_rules").select("id, category").eq("keyword", kw).limit(1);
+    if (kex && kex.length) { if (kex[0].category !== approvedCategory) await supabase.from("ceks_category_keyword_rules").update({ category: approvedCategory }).eq("id", kex[0].id); }
+    else await supabase.from("ceks_category_keyword_rules").insert({ keyword: kw, category: approvedCategory, source_type: alias });
+    _keywordRules = null;
+  }
   return true;
 }
 
