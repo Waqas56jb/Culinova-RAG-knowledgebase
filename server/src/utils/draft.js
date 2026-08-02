@@ -151,6 +151,25 @@ async function brandRuleFor(brand) {
   return k ? (await loadBrandRules()).get(k) || null : null;
 }
 
+// SELF-LEARNING (client requirement): when a reviewer manually classifies an item that EOS could not
+// classify on its own, remember it as a rule — record equipmentType -> approvedCategory as a synonym —
+// so the NEXT item with the same type/datasheet wording classifies automatically, always from the
+// approved list. The cache is dropped so the rule takes effect immediately.
+async function learnCategoryAlias(equipmentType, approvedCategory) {
+  const alias = String(equipmentType || "").trim();
+  if (!alias || !approvedCategory) return false;
+  const map = await loadApprovedCategories();
+  if (map.get(catKey(alias)) === approvedCategory) return false; // the type already IS this approved category — nothing to learn
+  const { data: existing } = await supabase.from("ceks_category_aliases").select("id, category").ilike("alias", alias).limit(1);
+  if (existing && existing.length) {
+    if (existing[0].category !== approvedCategory) await supabase.from("ceks_category_aliases").update({ category: approvedCategory }).eq("id", existing[0].id);
+  } else {
+    await supabase.from("ceks_category_aliases").insert({ alias, category: approvedCategory, note: "learned from manual classification" });
+  }
+  _catAliases = null; // drop the cache so the learned rule applies to the very next classification
+  return true;
+}
+
 // Resolve the final { family, category } for an item, applying (in order): the brand's fixed category,
 // then synonym/exact category resolution; and for family: an explicit family, then the brand's family,
 // then the family derived from the resolved category. Returns nulls when it genuinely cannot classify
@@ -462,6 +481,9 @@ async function updateEntryIdentity(entryId, id) {
     })
     .eq("id", entryId);
 
+  // SELF-LEARNING: remember this manual classification so the same equipment type auto-classifies next time.
+  if (approvedCat && id.equipment_type) await learnCategoryAlias(id.equipment_type, approvedCat);
+
   return { title, family, category: approvedCat, brand: brand.name, equipment_type: type.name };
 }
 
@@ -470,5 +492,5 @@ module.exports = {
   // exported so a bulk importer can resolve the same taxonomy without duplicating this logic
   findOrCreateCategory, findOrCreateType, findOrCreateBrand, familyForCategory,
   resolveApprovedCategory, loadApprovedCategories, loadCategoryAliases,
-  loadBrandRules, brandRuleFor, classifyFamilyCategory,
+  loadBrandRules, brandRuleFor, classifyFamilyCategory, learnCategoryAlias,
 };
