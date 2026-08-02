@@ -38,6 +38,13 @@ async function assertApprovable(entry) {
   if (!entry || !entry.current_version_id) return;
   const blockers = await recs.approvalBlockers(entry.current_version_id);
 
+  // CLIENT RULE: Family and Category are mandatory. A product can never be approved (become a valid,
+  // trusted product) while either is empty — it must be classified into the approved list first.
+  if (!entry.family || !entry.category) {
+    const miss = !entry.family && !entry.category ? "Family and Category" : !entry.family ? "Family" : "Category";
+    blockers.push({ type: "missing_classification", message: `${miss} must be assigned from the approved list before this product can be approved.` });
+  }
+
   // The client's core engineering rule: EOS must guarantee COMPLETE, VALID data before an equipment
   // record is trusted — not store incomplete data and fix it later. The applicability engine already
   // decides which sections APPLY to this equipment (a stainless table has no electrical/water/gas, so

@@ -119,6 +119,44 @@ async function resolveApprovedCategory(candidates) {
   return null; // 3) otherwise flag for a human to pick from the approved list
 }
 
+// BRAND -> Family/Category rules (client-extensible ceks_brand_class_rules). A brand pins the Family
+// (and optionally the Category) so items still classify when the datasheet wording is generic — e.g.
+// NOVA COOL -> Refrigeration, Metro/Cambro -> Serving & Distribution/Rack. Re-validated against the
+// approved taxonomy at load, so a brand rule can NEVER introduce a non-approved family/category.
+let _brandRules = null;
+async function loadBrandRules() {
+  if (_brandRules) return _brandRules;
+  _brandRules = new Map();
+  try {
+    const approved = await loadApprovedCategories();
+    const fams = new Set(await loadFamilyNames());
+    const { data } = await supabase.from("ceks_brand_class_rules").select("brand, family, category");
+    for (const r of data || []) {
+      if (!r.brand || !r.family || !fams.has(r.family)) continue; // family must be approved
+      const cat = r.category ? approved.get(catKey(r.category)) : null;
+      if (r.category && !cat) continue; // a stated category that isn't approved -> drop (never invent)
+      _brandRules.set(catKey(r.brand), { family: r.family, category: cat || null });
+    }
+  } catch { /* table may not exist yet — brand rules simply don't apply */ }
+  return _brandRules;
+}
+async function brandRuleFor(brand) {
+  const k = catKey(brand);
+  return k ? (await loadBrandRules()).get(k) || null : null;
+}
+
+// Resolve the final { family, category } for an item, applying (in order): the brand's fixed category,
+// then synonym/exact category resolution; and for family: an explicit family, then the brand's family,
+// then the family derived from the resolved category. Returns nulls when it genuinely cannot classify
+// (caller then flags the item for review — never saves it as a valid product with empty fields).
+async function classifyFamilyCategory({ category, equipment_type, brand, family } = {}) {
+  const rule = await brandRuleFor(brand);
+  const approvedCat = await resolveApprovedCategory([category, equipment_type]);
+  const finalCategory = (rule && rule.category) ? rule.category : approvedCat;
+  const finalFamily = family || (rule && rule.family) || (finalCategory ? await familyForCategory(finalCategory) : null);
+  return { family: finalFamily || null, category: finalCategory || null };
+}
+
 async function findOrCreateCategory(name) {
   const clean = name || "Uncategorized";
   const key = clean.toLowerCase();
@@ -205,9 +243,11 @@ async function findOrCreateModel(brandId, modelIdentifier, extra = {}) {
  * @param {string} p.origin 'ai_pdf' | 'excel' | 'manual'
  */
 async function persistDraft({ model = {}, attributes = [], notes = [], origin = "ai_pdf" }) {
-  // CATEGORY LOCK — resolve to one of the APPROVED categories (try the explicit category, then the
-  // equipment_type). No confident match → the item is FLAGGED for review, never given an invented category.
-  const approvedCat = await resolveApprovedCategory([model.category, model.equipment_type]);
+  // CATEGORY LOCK + BRAND CLASSIFICATION — resolve to an APPROVED family+category (brand fixed category,
+  // then synonym/exact; family from brand rule or derived). No confident match → FLAGGED for review,
+  // never given an invented category. Family + Category are mandatory for a valid product.
+  const cls = await classifyFamilyCategory({ category: model.category, equipment_type: model.equipment_type, brand: model.brand, family: model.family });
+  const approvedCat = cls.category;
   const category = await findOrCreateCategory(approvedCat || "Unassigned");
   const type = await findOrCreateType(category.id, model.equipment_type);
   const brand = await findOrCreateBrand(type.id, model.brand);
@@ -241,8 +281,8 @@ async function persistDraft({ model = {}, attributes = [], notes = [], origin = 
   const brandKnown = brand.name && brand.name.toLowerCase() !== "unknown";
   const title = brandKnown ? `${brand.name} ${modelRow.model_number}` : (model.display_name || modelRow.model_number);
   const attrOrigin = origin === "ai_pdf" ? "ai_extracted" : origin === "excel" ? "excel" : "manual";
-  // Family → Category → Model: an explicit family wins, otherwise it is derived from the approved category.
-  const family = model.family || (approvedCat ? await familyForCategory(approvedCat) : null);
+  // Family → Category → Model: family from the brand rule / explicit value / derived from the category.
+  const family = cls.family;
   // denormalized identity for fast admin search/filter/sort
   const identityFields = {
     family,
@@ -252,8 +292,12 @@ async function persistDraft({ model = {}, attributes = [], notes = [], origin = 
     power_type: model.power_type || null,
     model_number: modelRow.model_number,
   };
-  // flag any item whose category could not be matched to the approved list, so a human assigns it
-  if (!approvedCat) notes.push({ note_type: "review", content: `Category needs review: "${String(model.category || model.equipment_type || "").trim() || "?"}" is not one of the approved categories — please assign the correct category.` });
+  // MANDATORY Family + Category — flag any item missing either so a human assigns it from the approved list
+  if (!family || !approvedCat) {
+    const raw = String(model.category || model.equipment_type || "").trim() || "?";
+    const miss = !family && !approvedCat ? "Family and Category" : !family ? "Family" : "Category";
+    notes.push({ note_type: "review", content: `${miss} needs review: could not classify "${raw}" (brand ${brand.name || "?"}) into the approved list — please assign from the approved Family/Category.` });
+  }
 
   // ---- DEDUP: one knowledge entry per model ----------------------------
   // If this model already has an entry, add a NEW VERSION for re-review
@@ -374,7 +418,9 @@ async function updateEntryIdentity(entryId, id) {
   if (!link) throw new Error("Model not found for this entry.");
   const modelId = link.scope_id;
 
-  const approvedCat = await resolveApprovedCategory([id.category, id.equipment_type]);
+  // The reviewer's explicit category wins; only if they left it blank do we fall back to brand rule + synonyms.
+  const explicitCat = await resolveApprovedCategory([id.category]);
+  const approvedCat = explicitCat || (await classifyFamilyCategory({ category: id.category, equipment_type: id.equipment_type, brand: id.brand })).category;
   const category = await findOrCreateCategory(approvedCat || "Unassigned");
   const type = await findOrCreateType(category.id, id.equipment_type);
   const brand = await findOrCreateBrand(type.id, id.brand);
@@ -418,4 +464,5 @@ module.exports = {
   // exported so a bulk importer can resolve the same taxonomy without duplicating this logic
   findOrCreateCategory, findOrCreateType, findOrCreateBrand, familyForCategory,
   resolveApprovedCategory, loadApprovedCategories, loadCategoryAliases,
+  loadBrandRules, brandRuleFor, classifyFamilyCategory,
 };

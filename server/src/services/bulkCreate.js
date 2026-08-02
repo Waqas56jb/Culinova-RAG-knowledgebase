@@ -14,7 +14,7 @@
  * and only the genuinely new ones are inserted.
  */
 const { supabase } = require("../config/supabase");
-const { findOrCreateCategory, findOrCreateType, findOrCreateBrand, familyForCategory, resolveApprovedCategory, slug } = require("../utils/draft");
+const { findOrCreateCategory, findOrCreateType, findOrCreateBrand, familyForCategory, resolveApprovedCategory, classifyFamilyCategory, slug } = require("../utils/draft");
 
 const clean = (v) => (v == null ? null : String(v).trim() || null);
 
@@ -42,18 +42,18 @@ async function bulkCreateProducts(products, { origin = "excel", sourceDocument =
 
   // CATEGORY LOCK — resolve each product to one of the APPROVED categories (try its category, then its
   // type). No confident match → null → the entry is flagged for review, NEVER given an invented category.
-  const approvedCache = new Map();
+  // Classify Family+Category once per distinct (category|type|brand|family): brand rule pins the family
+  // (and optional category), synonyms/exact resolve the category, family is derived otherwise.
+  const clsCache = new Map();
+  const clsKey = (p) => `${p.id.category || ""}|${p.id.type || ""}|${brandNameOf(p)}|${p.id.family || ""}`;
   for (const p of usable) {
-    const k = `${p.id.category || ""}|${p.id.type || ""}`;
-    if (!approvedCache.has(k)) approvedCache.set(k, await resolveApprovedCategory([p.id.category, p.id.type]));
+    const k = clsKey(p);
+    if (!clsCache.has(k)) clsCache.set(k, await classifyFamilyCategory({ category: p.id.category, equipment_type: p.id.type, brand: brandNameOf(p), family: p.id.family }));
   }
-  const approvedCatOf = (p) => approvedCache.get(`${p.id.category || ""}|${p.id.type || ""}`) || null;
+  const clsOf = (p) => clsCache.get(clsKey(p)) || { family: null, category: null };
+  const approvedCatOf = (p) => clsOf(p).category || null;
   const relCatOf = (p) => approvedCatOf(p) || "Unassigned"; // relational placeholder; never shown as the entry's category
-
-  // Family derived from the APPROVED category (an explicit family on the row wins).
-  const familyByApproved = new Map();
-  for (const p of usable) { const a = approvedCatOf(p); if (a && !familyByApproved.has(a)) familyByApproved.set(a, await familyForCategory(a)); }
-  const familyFor = (p) => p.id.family || (approvedCatOf(p) ? familyByApproved.get(approvedCatOf(p)) : null) || null;
+  const familyFor = (p) => clsOf(p).family || null;
 
   const brandOf = new Map(); // "cat|type|brand" → brand row
   for (const p of usable) {
@@ -217,7 +217,7 @@ async function bulkCreateProducts(products, { origin = "excel", sourceDocument =
     });
     if (clean(p.id.remarks)) noteRows.push({ version_id: v.id, content: clean(p.id.remarks), note_type: "engineering" });
     // flag any product whose category is not one of the approved categories, so a human assigns it
-    if (!approvedCatOf(p)) noteRows.push({ version_id: v.id, note_type: "review", content: `Category needs review: "${String(p.id.category || p.id.type || "").trim() || "?"}" is not one of the approved categories — please assign the correct category.` });
+    if (!approvedCatOf(p) || !familyFor(p)) noteRows.push({ version_id: v.id, note_type: "review", content: `Family/Category needs review: could not classify "${String(p.id.category || p.id.type || "").trim() || "?"}" (brand ${brandNameOf(p)}) into the approved list — please assign from the approved Family/Category.` });
     // a non-displayable photo folder/file reference is kept as a note (never a broken image)
     for (const n of p.notes || []) noteRows.push({ version_id: v.id, content: n.content, note_type: n.note_type || "engineering" });
     historyRows.push({
