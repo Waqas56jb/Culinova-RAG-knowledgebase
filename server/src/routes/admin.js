@@ -40,10 +40,12 @@ router.get("/entries", canRead, async (req, res) => {
     q = applyFacet(q, "power_type", power_type);
     if (origin) q = q.eq("origin", origin);
     // CLIENT RULE: a product with an empty Family or Category is NOT a valid product — it must never
-    // appear in the normal list. The default list hides them; the review queue is reached by selecting
-    // the "Unspecified" facet on Family or Category (which uses IS NULL above).
-    const reviewMode = family === UNSPECIFIED || category === UNSPECIFIED;
-    if (!reviewMode) { q = q.not("family", "is", null).not("category", "is", null); }
+    // appear in the normal list. So the default/approved list hides them. They ARE shown when the user
+    // is deliberately looking at the review pipeline — i.e. the "Unspecified" Family/Category facet, or
+    // a work-in-progress status filter (draft / under_review / pending) — so the queue stays reachable.
+    const reviewFacet = family === UNSPECIFIED || category === UNSPECIFIED;
+    const reviewStatus = ["draft", "under_review", "pending"].includes(status);
+    if (!reviewFacet && !reviewStatus) { q = q.not("family", "is", null).not("category", "is", null); }
     if (search) {
       // dotted model codes (TBS.180) must survive — buildOrIlike quotes the value so "." is literal
       const clause = buildOrIlike(["title", "code", "model_number"], search);
